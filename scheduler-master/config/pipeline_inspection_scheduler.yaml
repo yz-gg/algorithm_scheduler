@@ -1,0 +1,99 @@
+# Mission controller selected by scheduler_node. Supported values:
+# pipeline_inspection, cage_inspection, dam_inspection, docking.
+mission_type: "pipeline_inspection"
+
+# Generic flight mode used by scheduler_node before any mission logic starts.
+flight_mode: "GUIDED"
+
+# Whether scheduler_node should block until /mavros/state reports FCU connected.
+wait_for_fcu_connection: true
+
+# Whether scheduler_node should request flight mode switch on startup.
+set_flight_mode_on_start: true
+
+# Whether scheduler_node should send an arm command on startup.
+auto_arm: true
+
+# Maximum time spent waiting for MAVROS services to appear.
+mavros_service_wait_sec: 5.0
+
+# Module name registered in launch_registry.yaml. The controller asks the launch
+# manager to start this module automatically.
+autostart_module: "pipeline_inspection"
+
+# Topic carrying the pipeline observation with primary line, secondary line,
+# and corner intersection.
+observation_topic: "/inspection/pipeline_observation"
+
+# Whether the inspection state machine starts immediately after scheduler init.
+auto_start_inspection: true
+
+# Main control loop frequency.
+command_rate_hz: 20.0
+
+# Drop observations older than this timeout.
+observation_timeout_sec: 0.5
+
+# Primary line must stay valid for this long before entering align mode.
+line_stable_hold_sec: 0.5
+
+# Target line must stay aligned for this long before entering tracking mode.
+align_hold_sec: 1.0
+
+# Corner trigger must stay active for this long before committing to the turn.
+turn_trigger_hold_sec: 0.3
+
+# Minimum time to keep turning before accepting the secondary line.
+turn_commit_sec: 0.5
+
+# Maximum time spent turning while searching for the secondary line.
+turn_timeout_sec: 4.0
+
+# Optional total inspection duration. Set to 0 to disable time-based finish.
+inspection_duration_sec: 0.0
+
+# Minimum observation confidence accepted by the controller.
+min_observation_confidence: 0.6
+
+# Minimum number of points required to fit each centerline.
+min_primary_line_points: 8
+min_secondary_line_points: 8
+
+# Row used to measure lateral offset. 0 is image top, 1 is image bottom.
+reference_row_ratio: 0.65
+
+# Alignment tolerances.
+lateral_tolerance_norm: 0.08
+angle_tolerance_rad: 0.10
+
+# Image-servo gains. Flip the sign if your body-frame convention is opposite.
+vy_from_x_gain: 0.18
+yaw_rate_from_angle_gain: 0.35
+vx_from_range_gain: 0.15
+
+# Forward speed presets.
+align_forward_speed: 0.03
+track_forward_speed: 0.12
+turn_forward_speed: 0.04
+
+# Open-loop yaw rate used while committing to the corner turn.
+turn_yaw_rate: 0.18
+
+# Velocity saturation limits.
+max_forward_speed: 0.20
+max_lateral_speed: 0.15
+max_yaw_rate: 0.25
+
+# Optional range target. Disable by setting <= 0.
+target_range_m: -1.0
+
+# Start turning once the intersection is this close to the bottom edge.
+turn_trigger_bottom_distance_px: 120.0
+
+# If the secondary line lies on the image right, a value of 1 means positive
+# yaw rate is a right turn. Set to -1 if your yaw convention is opposite.
+turn_direction_sign_from_image_x: 1.0
+
+# Launch manager service throttling.
+module_request_interval_sec: 1.0
+service_wait_sec: 0.2

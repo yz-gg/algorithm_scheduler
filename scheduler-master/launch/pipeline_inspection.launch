@@ -1,0 +1,37 @@
+<launch>
+  <arg name="use_external_process" default="false"/>
+  <arg name="algorithm_pkg" default="scheduler"/>
+  <arg name="algorithm_type" default="pipeline_detection_stub.py"/>
+  <arg name="algorithm_name" default="pipeline_vision_node"/>
+  <arg name="observation_topic" default="/inspection/pipeline_observation"/>
+  <arg name="python_executable" default="python3"/>
+  <arg name="algorithm_script" default=""/>
+  <arg name="algorithm_working_directory" default=""/>
+  <arg name="algorithm_args" default=""/>
+  <arg name="restart_on_exit" default="false"/>
+  <arg name="restart_delay_sec" default="1.0"/>
+
+  <node
+    unless="$(arg use_external_process)"
+    pkg="$(arg algorithm_pkg)"
+    type="$(arg algorithm_type)"
+    name="$(arg algorithm_name)"
+    output="screen">
+    <param name="observation_topic" value="$(arg observation_topic)"/>
+  </node>
+
+  <node
+    if="$(arg use_external_process)"
+    pkg="scheduler"
+    type="external_pipeline_algorithm_bridge.py"
+    name="$(arg algorithm_name)"
+    output="screen">
+    <param name="observation_topic" value="$(arg observation_topic)"/>
+    <param name="python_executable" value="$(arg python_executable)"/>
+    <param name="algorithm_script" value="$(arg algorithm_script)"/>
+    <param name="algorithm_working_directory" value="$(arg algorithm_working_directory)"/>
+    <param name="algorithm_args" value="$(arg algorithm_args)"/>
+    <param name="restart_on_exit" value="$(arg restart_on_exit)"/>
+    <param name="restart_delay_sec" value="$(arg restart_delay_sec)"/>
+  </node>
+</launch>

@@ -1,0 +1,6 @@
+string module_name
+string command
+---
+bool success
+string state
+string message

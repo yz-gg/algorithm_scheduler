@@ -1,0 +1,12 @@
+modules:
+  pipeline_inspection:
+    package: scheduler
+    launch: pipeline_inspection.launch
+    description: "Pipeline inspection perception module wrapper"
+    arguments:
+      use_external_process: true
+      python_executable: /home/orangepi/anaconda3/envs/gs_new/bin/python
+      algorithm_script: /home/orangepi/PycharmProjects/PythonProject/pipe/xcpjeson.py
+      algorithm_working_directory: /home/orangepi/PycharmProjects/PythonProject/pipe
+      restart_on_exit: true
+      restart_delay_sec: 1.0
