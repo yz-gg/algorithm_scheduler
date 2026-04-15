@@ -43,6 +43,7 @@ add_executable(scheduler_node
   src/scheduler_node.cpp
   src/mavros_command_interface.cpp
   src/pipeline_inspection_controller.cpp
+  src/docking_controller.cpp
   src/simple_mission_controller.cpp
   src/mission_controller_factory.cpp
 )

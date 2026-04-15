@@ -12,7 +12,7 @@ DockingController::DockingController(
         ros::NodeHandle nh,
         ros::NodeHandle pnh,
         VehicleCommandInterface* vehicle) :
-        nh_(nh), pnh_(pnh), vehicle_(vehicle)
+        nh_(std::move(nh)), pnh_(std::move(pnh)), vehicle_(vehicle)
         {
             loadParameters();
         }

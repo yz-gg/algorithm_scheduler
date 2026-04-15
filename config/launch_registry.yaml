@@ -10,3 +10,15 @@ modules:
       algorithm_working_directory: /home/orangepi/PycharmProjects/PythonProject/pipe
       restart_on_exit: true
       restart_delay_sec: 1.0
+  docking:
+    package: scheduler
+    launch: docking.launch
+    description: "Docking perception module wrapper"
+    arguments:
+      use_external_process: true
+      python_executable: /home/orangepi/anaconda3/envs/gs_new/bin/python
+      algorithm_script: /home/orangepi/
+      algorithm_working_directory: /home/orangepi/
+      restart_on_exit: true
+      restart_delay_sec: 1.0
+
