@@ -141,7 +141,7 @@ private:
     void AprilTagObservationCb();
     void EnterState(State next_state);
     void step();
-    std::string stateToString(InspectionState state) const;
+    std::string stateToString(State state) const;
 
     void handleStart();
     void handleSearch();
