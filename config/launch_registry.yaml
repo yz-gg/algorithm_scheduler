@@ -12,7 +12,7 @@ modules:
       restart_delay_sec: 1.0
   docking:
     package: scheduler
-    launch: docking.launch
+    launch: docking_todo.launch
     description: "Docking perception module wrapper"
     arguments:
       use_external_process: true

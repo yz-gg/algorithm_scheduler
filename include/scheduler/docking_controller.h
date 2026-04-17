@@ -22,6 +22,11 @@ enum class State
 
 struct DockingData
 {
+    double surge = 0.0;
+    double sway = 0.0;
+    double heave =0.0;
+    double yaw = 0.0;
+
     bool blue_light_detected = false;
     bool dock_pose_valid = false;
     bool apriltag_detected = false;
@@ -31,18 +36,23 @@ struct DockingData
 
     double dock_yaw_error = 0.0;
     double dock_depth_error = 0.0;
+    double dock_sway_error = 0.0;
     double dock_distance = 0.0;
-
+    
+    double tag_sway_error =0.0;
     double tag_yaw_error = 0.0;
     double tag_depth_error = 0.0;
-    double tag_forward_error = 0.0;
 
     int blue_light_detected_count = 0;
+    int dock_detected_count = 0;
     int tag_detected_count = 0;
+    int tag_stable_count = 0;
 
     bool new_remote_light = false;
     bool new_dock_pose = false;
     bool new_tag = false;
+
+    void Reset();
 };
 
 struct SearchConfig
@@ -56,28 +66,32 @@ struct SearchConfig
 struct ApproachConfig
 {
     double forward_speed = 0.20;           
-    double yaw_kp = 0.8;                  
+    double yaw_kp = 0.8;
+    int stable_frame = 3;                  
 };
 
 struct AlignConfig
 {
-    bool ready_for_tag = false;
     double yaw_deg_tolerance = 5.0;
     double depth_m_tolerance = 0.08;
-    double horizon_m_tolerance = 0.07;
+    double sway_m_tolerance = 0.07;
+    double dist_tolerance = 0.3;
     double yaw_kp = 0.6;
     double sway_kp = 0.5;
     double heave_kp = 0.5;
+    double surge_speed = 0.1;
+    int stable_frame = 7;
 };
 
 struct AlignWithTagConfig
 {
     double yaw_deg_tolerance = 2.0;
     double depth_m_tolerance = 0.04;
-    double horizon_m_tolerance = 0.03;
+    double sway_m_tolerance = 0.03;
     double yaw_kp = 0.4;
     double sway_kp = 0.3;
     double heave_kp = 0.3;
+    int stable_frame = 10;
 };
 
 struct EnterDockConfig
@@ -152,6 +166,8 @@ private:
     void handleCaptured();
     void handleCompleted();
     void handleError();
+    bool ReadyForTag();
+    bool ReadyForEnterDock();
 
     bool tryCallModuleCommand(
         const std::string& module_name,
