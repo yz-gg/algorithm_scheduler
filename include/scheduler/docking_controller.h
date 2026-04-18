@@ -58,16 +58,30 @@ struct DockingData
 struct SearchConfig
 {
     double scan_yaw_rate = 0.1 * M_PI;
+
     double timeout_s = 40;
     double retry_times = 3;
+
     double stable_frame = 5;
+
+    double max_surge = 0;
+    double max_sway = 0;
+    double max_heave = 0;
+    double max_yaw = 0.2;
 };
 
 struct ApproachConfig
 {
     double forward_speed = 0.20;           
     double yaw_kp = 0.8;
-    int stable_frame = 3;                  
+    double heave_kp = 0.1;
+
+    int stable_frame = 3;
+    
+    double max_surge = forward_speed;
+    double max_sway = 0.1;
+    double max_heave = 0.1;
+    double max_yaw = 0.3;
 };
 
 struct AlignConfig
@@ -76,11 +90,18 @@ struct AlignConfig
     double depth_m_tolerance = 0.08;
     double sway_m_tolerance = 0.07;
     double dist_tolerance = 0.3;
+
     double yaw_kp = 0.6;
     double sway_kp = 0.5;
     double heave_kp = 0.5;
     double surge_speed = 0.1;
+
     int stable_frame = 7;
+
+    double max_surge = surge_speed;
+    double max_sway = 0.2;
+    double max_heave = 0.1;
+    double max_yaw = 0.2;
 };
 
 struct AlignWithTagConfig
@@ -88,16 +109,28 @@ struct AlignWithTagConfig
     double yaw_deg_tolerance = 2.0;
     double depth_m_tolerance = 0.04;
     double sway_m_tolerance = 0.03;
+
     double yaw_kp = 0.4;
     double sway_kp = 0.3;
     double heave_kp = 0.3;
+
     int stable_frame = 10;
+
+    double max_surge = 0;
+    double max_sway = 1;
+    double max_heave = 0.05;
+    double max_yaw = 0.1;
 };
 
 struct EnterDockConfig
 {
     double forward_speed = 0.08;
     double max_duration = 8.0;
+
+    double max_surge = forward_speed;
+    double max_sway = 0;
+    double max_heave = 0;
+    double max_yaw = 0;
 };
 
 struct CapturedConfig
@@ -174,9 +207,7 @@ private:
         const std::string& command,
         scheduler::ControlModuleResponse* response);
 
-    ControlCommand UpdateApproachCmd();
-    ControlCommand UpdateAlignCmd();
-    ControlCommand UpdateEnterDockCmd();
+    ControlCommand BulidCmd();
     
 public:
     DockingController(
