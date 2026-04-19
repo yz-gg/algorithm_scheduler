@@ -1,15 +1,9 @@
 #include <scheduler/docking_controller.h>
 
+#include <algorithm>
 #include <cmath>
+#include <utility>
 
-/* 
-// TODO
-// loadParaments->codex
-// 算法接入，需要知道订阅什么话题
-// ->根据接入的算法，写回调函数
-// ->写handleStart
-
-*/
 namespace
 {
 double clampValue(double value, double min_value, double max_value)
@@ -18,406 +12,720 @@ double clampValue(double value, double min_value, double max_value)
 }
 }
 
+DockingController::DockingController(
+    ros::NodeHandle nh,
+    ros::NodeHandle pnh,
+    VehicleCommandInterface* vehicle)
+    : nh_(std::move(nh))
+    , pnh_(std::move(pnh))
+    , vehicle_(vehicle)
+{
+    loadParameters();
+
+    module_control_client_ = nh_.serviceClient<scheduler::ControlModule>(
+        "/launch_manager_node/control_module");
+}
+
 void DockingController::run()
 {
-    ros::Rate rate(fsm_data.docking_data.command_rate_hz);
+    ros::Rate rate(std::max(config_.command_rate_hz, 1.0));
 
     ROS_INFO("Docking controller started");
 
-    if (fsm_data.docking_data.auto_start_inspection)
+    if (config_.auto_start_inspection)
     {
-        enterState(State::START);
+        enterState(State::START, "docking state machine booted");
     }
     else
     {
-        enterState(State::SEARCH_BLUE_LIGHT);
+        enterState(
+            State::SEARCH_BLUE_LIGHT,
+            "auto start disabled, waiting for blue light detections");
     }
 
     while (ros::ok())
     {
         ros::spinOnce();
         step();
+        checkObversationFresh();
         rate.sleep();
     }
-}
 
-void DockingController::step()
-{
-    switch (fsm_data.state)
-    {
-    case START:
-        handleStart();
-        break;
-    case SEARCH_BLUE_LIGHT:
-        handleSearch();
-        break;
-    case APPROACH_BLUE_LIGHT:
-        handleApproach();
-        break;
-    case ALIGN_WITH_DOCK:
-        handleAlign();
-        break;
-    case ALIGN_WITH_APRILTAG:
-        handleAlignWithTag();
-        break;
-    case ENTER_DOCK:
-        handleEnterDock();
-        break;
-    case WAIT_CAPTURE:
-        handleCaptured();
-        break;
-    case COMPLETED:
-        handleCompleted();
-        break;
-    case ERROR:
-        handleError();
-        break;  
-    default:
-        break;
-    }
+    stopModuleIfNeeded();
+    vehicle_->publishHold();
 }
 
 std::string DockingController::missionType() const
 {
-    return "Docking";
+    return "docking";
 }
-
-
-DockingController::DockingController(
-        ros::NodeHandle nh,
-        ros::NodeHandle pnh,
-        VehicleCommandInterface* vehicle) :
-        nh_(std::move(nh)), pnh_(std::move(pnh)), vehicle_(vehicle)
-        {
-            loadParameters();
-
-            
-            module_control_client_ = nh_.serviceClient<scheduler::ControlModule>(
-            "/launch_manager_node/control_module");
-        }
 
 void DockingController::loadParameters()
 {
     pnh_.param<std::string>(
-        "autostart_module", docking_config.autostart_module, docking_config.autostart_module
-    )
+        "autostart_module", config_.autostart_module, config_.autostart_module);
     pnh_.param<std::string>(
-        "observation_topic", docking_config.observation_topic, docking_config.observation_topic
-    )
-    pnh_.param(
-        "auto_start_inspection", docking_config.auto_start_inspection, docking_config.auto_start_inspection
-    )
-    pnh_.param(
-        "command_rate_hz", docking_config.command_rate_hz, docking_config.command_rate_hz
-    )
-    pnh_.param(
-        "observation_timeout_sec", docking_config.observation_timeout_sec, docking_config.observation_timeout_sec
-    )
-    pnh_.param(
-        "module_request_interval_sec", docking_config.module_request_interval_sec, docking_config.module_request_interval_sec
-    )
-    pnh_.param(
-        "service_wait_sec", docking_config.service_wait_sec, docking_config.service_wait_sec
-    )
-    pnh_.param(
-        "scan_yaw_rate", fsm_data.search_config.scan_yaw_rate, fsm_data.search_config.scan_yaw_rate
-    )
-    
+        "topics/blue_light", config_.blue_light_topic, config_.blue_light_topic);
+    pnh_.param<std::string>(
+        "topics/dock_pose", config_.dock_pose_topic, config_.dock_pose_topic);
+    pnh_.param<std::string>(
+        "topics/apriltag", config_.apriltag_topic, config_.apriltag_topic);
 
+    pnh_.param(
+        "auto_start_inspection",
+        config_.auto_start_inspection,
+        config_.auto_start_inspection);
+    pnh_.param("command_rate_hz", config_.command_rate_hz, config_.command_rate_hz);
+    pnh_.param(
+        "observation_timeout_sec",
+        config_.observation_timeout_sec,
+        config_.observation_timeout_sec);
+    pnh_.param(
+        "module_request_interval_sec",
+        config_.module_request_interval_sec,
+        config_.module_request_interval_sec);
+    pnh_.param(
+        "service_wait_sec", config_.service_wait_sec, config_.service_wait_sec);
+
+    pnh_.param(
+        "search/scan_yaw_rate",
+        config_.search.scan_yaw_rate,
+        config_.search.scan_yaw_rate);
+    pnh_.param(
+        "search/timeout_sec",
+        config_.search.timeout_sec,
+        config_.search.timeout_sec);
+    pnh_.param(
+        "search/retry_times",
+        config_.search.retry_times,
+        config_.search.retry_times);
+    pnh_.param(
+        "search/stable_frames",
+        config_.search.stable_frames,
+        config_.search.stable_frames);
+    loadMotionLimits("search", &config_.search.command_limits);
+
+    pnh_.param(
+        "approach/forward_speed",
+        config_.approach.forward_speed,
+        config_.approach.forward_speed);
+    pnh_.param(
+        "approach/yaw_kp",
+        config_.approach.yaw_kp,
+        config_.approach.yaw_kp);
+    pnh_.param(
+        "approach/heave_kp",
+        config_.approach.heave_kp,
+        config_.approach.heave_kp);
+    pnh_.param(
+        "approach/stable_frames",
+        config_.approach.stable_frames,
+        config_.approach.stable_frames);
+    loadMotionLimits("approach", &config_.approach.command_limits);
+
+    pnh_.param(
+        "align/yaw_deg_tolerance",
+        config_.align.yaw_deg_tolerance,
+        config_.align.yaw_deg_tolerance);
+    pnh_.param(
+        "align/depth_m_tolerance",
+        config_.align.depth_m_tolerance,
+        config_.align.depth_m_tolerance);
+    pnh_.param(
+        "align/sway_m_tolerance",
+        config_.align.sway_m_tolerance,
+        config_.align.sway_m_tolerance);
+    pnh_.param(
+        "align/dist_tolerance",
+        config_.align.dist_tolerance,
+        config_.align.dist_tolerance);
+    pnh_.param("align/yaw_kp", config_.align.yaw_kp, config_.align.yaw_kp);
+    pnh_.param("align/sway_kp", config_.align.sway_kp, config_.align.sway_kp);
+    pnh_.param("align/heave_kp", config_.align.heave_kp, config_.align.heave_kp);
+    pnh_.param(
+        "align/surge_speed",
+        config_.align.surge_speed,
+        config_.align.surge_speed);
+    pnh_.param(
+        "align/stable_frames",
+        config_.align.stable_frames,
+        config_.align.stable_frames);
+    loadMotionLimits("align", &config_.align.command_limits);
+
+    pnh_.param(
+        "align_with_tag/yaw_deg_tolerance",
+        config_.align_with_tag.yaw_deg_tolerance,
+        config_.align_with_tag.yaw_deg_tolerance);
+    pnh_.param(
+        "align_with_tag/depth_m_tolerance",
+        config_.align_with_tag.depth_m_tolerance,
+        config_.align_with_tag.depth_m_tolerance);
+    pnh_.param(
+        "align_with_tag/sway_m_tolerance",
+        config_.align_with_tag.sway_m_tolerance,
+        config_.align_with_tag.sway_m_tolerance);
+    pnh_.param(
+        "align_with_tag/yaw_kp",
+        config_.align_with_tag.yaw_kp,
+        config_.align_with_tag.yaw_kp);
+    pnh_.param(
+        "align_with_tag/sway_kp",
+        config_.align_with_tag.sway_kp,
+        config_.align_with_tag.sway_kp);
+    pnh_.param(
+        "align_with_tag/heave_kp",
+        config_.align_with_tag.heave_kp,
+        config_.align_with_tag.heave_kp);
+    pnh_.param(
+        "align_with_tag/stable_frames",
+        config_.align_with_tag.stable_frames,
+        config_.align_with_tag.stable_frames);
+    loadMotionLimits("align_with_tag", &config_.align_with_tag.command_limits);
+
+    pnh_.param(
+        "enter_dock/forward_speed",
+        config_.enter_dock.forward_speed,
+        config_.enter_dock.forward_speed);
+    pnh_.param(
+        "enter_dock/max_duration_sec",
+        config_.enter_dock.max_duration_sec,
+        config_.enter_dock.max_duration_sec);
+    loadMotionLimits("enter_dock", &config_.enter_dock.command_limits);
+
+    pnh_.param(
+        "capture/timeout_sec",
+        config_.capture.timeout_sec,
+        config_.capture.timeout_sec);
 }
 
-void DockingController::RemoteBlueLightObservationCb()
+void DockingController::loadMotionLimits(
+    const std::string& prefix,
+    MotionLimitConfig* limits)
 {
+    if (limits == nullptr)
+    {
+        return;
+    }
 
+    pnh_.param(prefix + "/max_surge", limits->surge, limits->surge);
+    pnh_.param(prefix + "/max_sway", limits->sway, limits->sway);
+    pnh_.param(prefix + "/max_heave", limits->heave, limits->heave);
+    pnh_.param(prefix + "/max_yaw", limits->yaw, limits->yaw);
 }
 
-void DockingController::DockObservationCb()
+void DockingController::step()
 {
-
+    switch (state_)
+    {
+    case State::START:
+        handleStart();
+        break;
+    case State::SEARCH_BLUE_LIGHT:
+        handleSearch();
+        break;
+    case State::APPROACH_BLUE_LIGHT:
+        handleApproach();
+        break;
+    case State::ALIGN_WITH_DOCK:
+        handleAlign();
+        break;
+    case State::ALIGN_WITH_APRILTAG:
+        handleAlignWithTag();
+        break;
+    case State::ENTER_DOCK:
+        handleEnterDock();
+        break;
+    case State::WAIT_CAPTURE:
+        handleCaptured();
+        break;
+    case State::COMPLETED:
+        handleCompleted();
+        break;
+    case State::ERROR:
+        handleError();
+        break;
+    }
 }
 
-void DockingController::AprilTagObservationCb()
+void DockingController::enterState(
+    State next_state,
+    const std::string& reason)
 {
+    if (state_ == next_state && !state_entered_at_.isZero())
+    {
+        return;
+    }
 
-}
+    ROS_INFO_STREAM(
+        "Docking state transition [" << stateToString(state_) << "] -> ["
+        << stateToString(next_state) << "]"
+        << (reason.empty() ? "" : ": " + reason));
 
-void DockingController::EnterState(State next_state)
-{
-    fsm_data.state = next_state;
-    fsm_data.entertime = ros::Time();
+    state_ = next_state;
+    state_entered_at_ = ros::Time::now();
 }
 
 std::string DockingController::stateToString(State state) const
 {
     switch (state)
     {
-        std::string str = "";
-    case START:
-        str = "START";
-        break;
-    case SEARCH_BLUE_LIGHT:
-        str = "SEARCH_BLUE_LIGHT";
-        break;
-        case APPROACH_BLUE_LIGHT:
-        str = "APPROACH_BLUE_LIGHT";
-        break;
-        case ALIGN_WITH_DOCK:
-        str = "ALIGN_WITH_DOCK";
-        break;
-        case ALIGN_WITH_APRILTAG:
-        str = "ALIGN_WITH_APRILTAG";
-        break;
-        case ENTER_DOCK:
-        str = "ENTER_DOCK";
-        break;
-        case WAIT_CAPTURE:
-        str = "WAIT_CAPTURE";
-        break;
-        case COMPLETED:
-        str = "COMPLETED";
-        break;
-        case ERROR:
-        str = "ERROR";
-        break;
-    default:
-        break;
-        return str;
+    case State::START:
+        return "START";
+    case State::SEARCH_BLUE_LIGHT:
+        return "SEARCH_BLUE_LIGHT";
+    case State::APPROACH_BLUE_LIGHT:
+        return "APPROACH_BLUE_LIGHT";
+    case State::ALIGN_WITH_DOCK:
+        return "ALIGN_WITH_DOCK";
+    case State::ALIGN_WITH_APRILTAG:
+        return "ALIGN_WITH_APRILTAG";
+    case State::ENTER_DOCK:
+        return "ENTER_DOCK";
+    case State::WAIT_CAPTURE:
+        return "WAIT_CAPTURE";
+    case State::COMPLETED:
+        return "COMPLETED";
+    case State::ERROR:
+        return "ERROR";
     }
+
+    return "UNKNOWN";
 }
 
-/* 
-    srv->start algorithm module
-    if suc->search?
-    timeout?
-*/
+double DockingController::stateElapsedSec() const
+{
+    if (state_entered_at_.isZero())
+    {
+        return 0.0;
+    }
+
+    return (ros::Time::now() - state_entered_at_).toSec();
+}
+
 void DockingController::handleStart()
 {
+    vehicle_->publishHold();
 
-    EnterState(SEARCH_BLUE_LIGHT);
+    if (config_.autostart_module.empty())
+    {
+        enterState(State::SEARCH_BLUE_LIGHT, "no autostart module configured");
+        return;
+    }
+
+    if (module_started_)
+    {
+        enterState(State::SEARCH_BLUE_LIGHT, "docking module already running");
+        return;
+    }
+
+    const ros::Time now = ros::Time::now();
+    if (!last_module_request_time_.isZero() &&
+        (now - last_module_request_time_).toSec() < config_.module_request_interval_sec)
+    {
+        return;
+    }
+
+    last_module_request_time_ = now;
+
+    scheduler::ControlModuleResponse response;
+    if (!tryCallModuleCommand(config_.autostart_module, "start", &response))
+    {
+        return;
+    }
+
+    if (response.success)
+    {
+        module_started_ =
+            (response.state == "RUNNING" || response.message == "module already running");
+        enterState(State::SEARCH_BLUE_LIGHT, "docking module started");
+        return;
+    }
+
+    ROS_WARN_THROTTLE(
+        5.0,
+        "Docking module [%s] failed to start: %s",
+        config_.autostart_module.c_str(),
+        response.message.c_str());
 }
 
-/* 
-    超时?
-*/
 void DockingController::handleSearch()
 {
-    yaw = fsm_data.search_config.scan_yaw_rate;
+    data_.clearCommand();
+    data_.yaw = config_.search.scan_yaw_rate;
+    vehicle_->publishCommand(buildCommand(state_));
 
-     vehicle_->publishCommand(BulidCmd(fsm_data.state));
-
-    if (fsm_data.docking_data.blue_light_detected && fsm_data.docking_data.new_remote_light)
+    if (config_.search.timeout_sec > 0.0 &&
+        stateElapsedSec() >= config_.search.timeout_sec)
     {
-        fsm_data.docking_data.blue_light_detected_count++;
-
-        if (fsm_data.docking_data.blue_light_detected_count > fsm_data.search_config.stable_frame)
+        ++search_retry_count_;
+        if (search_retry_count_ > config_.search.retry_times)
         {
-        EnterState(APPROACH_BLUE_LIGHT);
-        fsm_data.docking_data.Reset();
+            enterState(State::ERROR, "blue light search timed out");
+            return;
         }
 
-        fsm_data.docking_data.new_remote_light = false;
-    }
-    else if (!fsm_data.docking_data.blue_light_detected)
-    {
-        fsm_data.docking_data.blue_light_detected_count = 0;
+        data_.blue_light_detected_count = 0;
+        data_.blue_light_detected = false;
+        data_.new_remote_light = false;
+        state_entered_at_ = ros::Time::now();
+
+        ROS_WARN_STREAM(
+            "Retrying blue light search (" << search_retry_count_ << "/"
+            << config_.search.retry_times << ")");
+        return;
     }
 
+    if (data_.blue_light_detected && data_.new_remote_light)
+    {
+        ++data_.blue_light_detected_count;
+        data_.new_remote_light = false;
+
+        if (data_.blue_light_detected_count >= config_.search.stable_frames)
+        {
+            search_retry_count_ = 0;
+            data_.reset();
+            enterState(State::APPROACH_BLUE_LIGHT, "blue light detection is stable");
+        }
+
+        return;
+    }
+
+    if (!data_.blue_light_detected)
+    {
+        data_.blue_light_detected_count = 0;
+    }
 }
 
 void DockingController::handleApproach()
 {
-    if (fsm_data.docking_data.blue_light_detected && fsm_data.docking_data.new_remote_light)
+    if (data_.blue_light_detected && data_.new_remote_light)
     {
-        fsm_data.docking_data.yaw = fsm_data.approach_config.yaw_kp * fsm_data.docking_data.blue_light_yaw_error;
-        fsm_data.docking_data.surge = fsm_data.approach_config.forward_speed;
+        data_.clearCommand();
+        data_.yaw = config_.approach.yaw_kp * data_.blue_light_yaw_error;
+        data_.surge = config_.approach.forward_speed;
 
-        vehicle_->publishCommand(BulidCmd(fsm_data.state));
-
-        fsm_data.docking_data.new_remote_light = false;
+        vehicle_->publishCommand(buildCommand(state_));
+        data_.new_remote_light = false;
     }
     else
     {
         vehicle_->publishHold();
     }
-    
 
-    if (fsm_data.docking_data.dock_pose_valid && fsm_data.docking_data.new_remote_light)
+    if (data_.dock_pose_valid && data_.new_dock_pose)
     {
-        fsm_data.docking_data.dock_detected_count++;
-        fsm_data.docking_data.new_dock_pose = false;
+        ++data_.dock_detected_count;
+        data_.new_dock_pose = false;
 
-        if (fsm_data.docking_data.dock_detected_count > fsm_data.approach_config.stable_frame)
+        if (data_.dock_detected_count >= config_.approach.stable_frames)
         {
-            EnterState(ALIGN_WITH_DOCK);
-            fsm_data.docking_data.Reset();
+            data_.reset();
+            enterState(State::ALIGN_WITH_DOCK, "dock pose detection is stable");
         }
     }
-    else if (!fsm_data.docking_data.dock_pose_valid)
+    else if (!data_.dock_pose_valid)
     {
-        fsm_data.docking_data.dock_detected_count=0;
+        data_.dock_detected_count = 0;
     }
-
 }
 
 void DockingController::handleAlign()
 {
-    if (fsm_data.docking_data.dock_pose_valid && fsm_data.docking_data.new_dock_pose)
+    if (data_.dock_pose_valid && data_.new_dock_pose)
     {
-        fsm_data.docking_data.yaw = fsm_data.docking_data.dock_yaw_error * fsm_data.align_config.yaw_kp;
-        fsm_data.docking_data.sway = fsm_data.docking_data.dock_sway_error * fsm_data.align_config.sway_kp;
-        fsm_data.docking_data.heave = fsm_data.docking_data.dock_depth_error * fsm_data.align_config.heave_kp;
-        if (fsm_data.docking_data.dock_distance > fsm_data.align_config.dist_tolerance)
-        {
-            fsm_data.docking_data.surge = fsm_data.align_config.surge_speed;
-        }
-        else
-        {
-            fsm_data.docking_data.surge = 0;
-        }
+        data_.clearCommand();
+        data_.yaw = data_.dock_yaw_error * config_.align.yaw_kp;
+        data_.sway = data_.dock_sway_error * config_.align.sway_kp;
+        data_.heave = data_.dock_depth_error * config_.align.heave_kp;
+        data_.surge =
+            data_.dock_distance > config_.align.dist_tolerance ? config_.align.surge_speed
+                                                               : 0.0;
 
-        vehicle_->publishCommand(BulidCmd(fsm_data.state));
-        fsm_data.docking_data.new_dock_pose = false;
+        vehicle_->publishCommand(buildCommand(state_));
+        data_.new_dock_pose = false;
     }
     else
     {
         vehicle_->publishHold();
     }
-    
-    if (ReadyForTag() && fsm_data.docking_data.apriltag_detected && fsm_data.docking.new_tag)
+
+    const bool ready_for_tag = readyForTag();
+    if (ready_for_tag && data_.apriltag_detected && data_.new_tag)
     {
-        fsm_data.docking_data.tag_detected_count++;
+        ++data_.tag_detected_count;
+        data_.new_tag = false;
 
-        fsm_data.docking.new_tag = false;
-
-        if (fsm_data.docking_data.tag_detected_count > fsm_data.align_config.stable_frame)
+        if (data_.tag_detected_count >= config_.align.stable_frames)
         {
-            EnterState(ALIGN_WITH_APRILTAG);
-            fsm_data.docking_data.Reset();
+            data_.reset();
+            enterState(
+                State::ALIGN_WITH_APRILTAG,
+                "apriltag detection is stable near dock alignment");
         }
     }
-    else if (!ReadyForTag() || !fsm_data.docking_data.apriltag_detected)
+    else if (!ready_for_tag || !data_.apriltag_detected)
     {
-        fsm_data.docking_data.tag_detected_count = 0;
+        data_.tag_detected_count = 0;
     }
 }
 
 void DockingController::handleAlignWithTag()
 {
-    if (fsm_data.docking_data.apriltag_detected && fsm_data.docking_data.new_tag)
+    const bool has_new_tag = data_.apriltag_detected && data_.new_tag;
+    if (has_new_tag)
     {
-        fsm_data.docking_data.surge = 0;
-        fsm_data.docking_data.sway = fsm_data.align_with_tag_config.sway_kp * fsm_data.docking_data.tag_sway_error;
-        fsm_data.docking_data.heave = fsm_data.align_with_tag_config.heave_kp * fsm_data.docking_data.tag_depth_error;
-        fsm_data.docking_data.yaw = fsm_data.align_with_tag_config.yaw_kp * fsm_data.docking_data.tag_yaw_error;
+        data_.clearCommand();
+        data_.sway = config_.align_with_tag.sway_kp * data_.tag_sway_error;
+        data_.heave = config_.align_with_tag.heave_kp * data_.tag_depth_error;
+        data_.yaw = config_.align_with_tag.yaw_kp * data_.tag_yaw_error;
 
-        vehicle_->publishCommand(BulidCmd(fsm_data.state));
-        fsm_data.docking_data.new_tag = false;
+        vehicle_->publishCommand(buildCommand(state_));
     }
     else
     {
         vehicle_->publishHold();
     }
 
-    if (ReadyForEnterDock() && fsm_data.docking_data.new_tag)
+    const bool ready_for_enter_dock = readyForEnterDock();
+    if (has_new_tag && ready_for_enter_dock)
     {
-        fsm_data.docking_data.tag_stable_count++;
-        fsm_data.docking_data.new_tag = 0;
+        ++data_.tag_stable_count;
 
-        if (fsm_data.docking_data.tag_stable_count > fsm_data.align_with_tag_config.stable_frame)
+        if (data_.tag_stable_count >= config_.align_with_tag.stable_frames)
         {
-            EnterState(ENTER_DOCK);
-            docking_data.Reset();
+            data_.new_tag = false;
+            data_.reset();
+            enterState(State::ENTER_DOCK, "apriltag alignment is stable");
+            return;
         }
     }
-    else if (!ReadyForEnterDock())
+    else if (!ready_for_enter_dock || !data_.apriltag_detected)
     {
-        fsm_data.docking_data.tag_stable_count = 0;
+        data_.tag_stable_count = 0;
     }
+
+    data_.new_tag = false;
 }
 
 void DockingController::handleEnterDock()
 {
-    fsm_data.docking_data.surge = fsm_data.enterdock_config.forward_speed;
-     vehicle_->publishCommand(BulidCmd(fsm_data.state));
+    data_.clearCommand();
+    data_.surge = config_.enter_dock.forward_speed;
+    vehicle_->publishCommand(buildCommand(state_));
+
+    if (config_.enter_dock.max_duration_sec > 0.0 &&
+        stateElapsedSec() >= config_.enter_dock.max_duration_sec)
+    {
+        enterState(State::WAIT_CAPTURE, "enter dock duration reached");
+    }
 }
 
 void DockingController::handleCaptured()
 {
+    vehicle_->publishHold();
 
+    if (data_.captured)
+    {
+        enterState(State::COMPLETED, "capture feedback received");
+        return;
+    }
+
+    if (config_.capture.timeout_sec > 0.0 &&
+        stateElapsedSec() >= config_.capture.timeout_sec)
+    {
+        enterState(State::ERROR, "capture wait timed out");
+    }
 }
 
 void DockingController::handleCompleted()
 {
-
+    vehicle_->publishHold();
+    stopModuleIfNeeded();
 }
 
 void DockingController::handleError()
 {
-    
+    vehicle_->publishHold();
+    stopModuleIfNeeded();
 }
 
-void DockingData::Reset()
+void DockingController::RuntimeData::reset()
 {
-    *this = {};
+    *this = RuntimeData{};
 }
 
-bool DockingController::ReadyForTag()
+/* todo
+    topic
+*/
+void DockingController::BlueLightCB()
 {
-    return fsm_data.docking_data.dock_yaw_error < fsm_data.align_config.yaw_deg_tolerance &&
-            fsm_data.docking_data.dock_depth_error < fsm_data.align_config.depth_m_tolerance &&
-            fsm_data.docking_data.dock_sway_error < fsm_data.align_config.sway_m_tolerance &&
-            fsm_data.docking_data.dock_distance < fsm_data.align_config.dist_tolerance
-} 
+    data_.blue_light_detected = false;
+    data.blue_light_yaw_error = 0;
 
-bool DockingController::ReadyForEnterDock()
-{
-    return fsm_data.docking_data.tag_yaw_error  < fsm_data.align_with_tag_config.yaw_deg_tolerance &&
-            fsm_data.docking_data.tag_depth_error  < fsm_data.align_with_tag_config.depth_m_tolerance &&
-            fsm_data.docking_data.tag_sway_error  < fsm_data.align_with_tag_config.sway_m_tolerance
+    data_.new_remote_light = true;
+    data_.light_timestamp = ros::Time::now();
 }
 
-ControlCommand DockingController::BulidCmd(State s)
+void DockingController::DockPoseCB()
 {
-    switch (s)
+    data_.dock_pose_valid = false;
+    data_.dock_yaw_error = 0;
+    data_.dock_depth_error = 0;
+    data_.dock_sway_error = 0;
+    data_.dock_distance = 0;
+
+    data_.new_dock_pose = true;
+    data_.dock_pose_timestamp = ros::Time::now();
+}
+
+void DockingController::AprilTagCB()
+{
+    data_.apriltag_detected = false;
+    data_.tag_sway_error = 0;
+    data_.tag_yaw_error = 0;
+    data_.tag_depth_error = 0;
+
+    data_.new_tag = true;
+    data_.apriltag_timestamp = ros::Time::now();
+}
+
+void DockingController::checkObversationFresh()
+{
+    if (ros::Time::now() - data_.light_timestamp > config_.approach.fresh_tolerance_s)
     {
-        double vx = 0.0;
-        double vy = 0.0;
-        double vz = 0.0;
-        double yaw  = 0.0;
-    case SEARCH_BLUE_LIGHT:
-        vx = clampValue(fsm_data.docking_data.surge, -fsm_data.search_config.max_surge,fsm_data.search_config.max_surge);
-        vy = clampValue(fsm_data.docking_data.sway, -fsm_data.search_config.max_sway,fsm_data.search_config.max_sway);
-        vz = clampValue(fsm_data.docking_data.heave, -fsm_data.search_config.max_heave,fsm_data.search_config.max_heave);
-        yaw = clampValue(fsm_data.docking_data.yaw, -fsm_data.search_config.max_yaw,fsm_data.search_config.max_yaw);
-        break;
-    case APPROACH_BLUE_LIGHT:
-        vx = clampValue(fsm_data.docking_data.surge, -fsm_data.approach_config.max_surge,fsm_data.approach_config.max_surge);
-        vy = clampValue(fsm_data.docking_data.sway, -fsm_data.approach_config.max_sway,fsm_data.approach_config.max_sway);
-        vz = clampValue(fsm_data.docking_data.heave, -fsm_data.approach_config.max_heave,fsm_data.approach_config.max_heave);
-        yaw = clampValue(fsm_data.docking_data.yaw, -fsm_data.approach_config.max_yaw,fsm_data.approach_config.max_yaw);
-        break;
-    case ALIGN_WITH_DOCK:
-        vx = clampValue(fsm_data.docking_data.surge, -fsm_data.align_config.max_surge,fsm_data.align_config.max_surge);
-        vy = clampValue(fsm_data.docking_data.sway, -fsm_data.align_config.max_sway,fsm_data.align_config.max_sway);
-        vz = clampValue(fsm_data.docking_data.heave, -fsm_data.align_config.max_heave,fsm_data.align_config.max_heave);
-        yaw = clampValue(fsm_data.docking_data.yaw, -fsm_data.align_config.max_yaw,fsm_data.align_config.max_yaw);
-        break;
-    case ALIGN_WITH_APRILTAG:
-        vx = clampValue(fsm_data.docking_data.surge, -fsm_data.align_with_tag_config.max_surge,fsm_data.align_with_tag_config.max_surge);
-        vy = clampValue(fsm_data.docking_data.sway, -fsm_data.align_with_tag_config.max_sway,fsm_data.align_with_tag_config.max_sway);
-        vz = clampValue(fsm_data.docking_data.heave, -fsm_data.align_with_tag_config.max_heave,fsm_data.align_with_tag_config.max_heave);
-        yaw = clampValue(fsm_data.docking_data.yaw, -fsm_data.align_with_tag_config.max_yaw,fsm_data.align_with_tag_config.max_yaw);
-        break;
-    case ENTER_DOCK:
-        vx = clampValue(fsm_data.docking_data.surge, -fsm_data.enterdock_config.max_surge,fsm_data.enterdock_config.max_surge);
-        vy = clampValue(fsm_data.docking_data.sway, -fsm_data.enterdock_config.max_sway,fsm_data.enterdock_config.max_sway);
-        vz = clampValue(fsm_data.docking_data.heave, -fsm_data.enterdock_config.max_heave,fsm_data.enterdock_config.max_heave);
-        yaw = clampValue(fsm_data.docking_data.yaw, -fsm_data.enterdock_config.max_yaw,fsm_data.enterdock_config.max_yaw);
-        break;
-    default:
-        break;
+        data_.new_remote_light = false;
     }
-    
 
-    return VehicleCommandInterface::BodyVelocity(vx, vy, vz, yaw);
+    if (ros::Time::now() - data_.dock_pose_timestamp > config_.align.fresh_tolerance_s)
+    {
+        data_.new_dock_pose = false;
+    }
+
+    if (ros::Time::now() - data_.apriltag_timestamp > config_.align_with_tag.fresh_tolerance_s)
+    {
+        data_.new_tag = false;
+    }
+}
+
+void DockingController::RuntimeData::clearCommand()
+{
+    surge = 0.0;
+    sway = 0.0;
+    heave = 0.0;
+    yaw = 0.0;
+}
+
+bool DockingController::readyForTag() const
+{
+    return std::abs(data_.dock_yaw_error) <= config_.align.yaw_deg_tolerance &&
+           std::abs(data_.dock_depth_error) <= config_.align.depth_m_tolerance &&
+           std::abs(data_.dock_sway_error) <= config_.align.sway_m_tolerance &&
+           data_.dock_distance <= config_.align.dist_tolerance;
+}
+
+bool DockingController::readyForEnterDock() const
+{
+    return std::abs(data_.tag_yaw_error) <= config_.align_with_tag.yaw_deg_tolerance &&
+           std::abs(data_.tag_depth_error) <= config_.align_with_tag.depth_m_tolerance &&
+           std::abs(data_.tag_sway_error) <= config_.align_with_tag.sway_m_tolerance;
+}
+
+bool DockingController::tryCallModuleCommand(
+    const std::string& module_name,
+    const std::string& command,
+    scheduler::ControlModuleResponse* response)
+{
+    if (!module_control_client_.waitForExistence(ros::Duration(config_.service_wait_sec)))
+    {
+        ROS_WARN_THROTTLE(5.0, "Waiting for launch manager service");
+        return false;
+    }
+
+    scheduler::ControlModule srv;
+    srv.request.module_name = module_name;
+    srv.request.command = command;
+
+    if (!module_control_client_.call(srv))
+    {
+        ROS_WARN_THROTTLE(5.0, "Failed to call launch manager service");
+        return false;
+    }
+
+    if (response != nullptr)
+    {
+        *response = srv.response;
+    }
+
+    return true;
+}
+
+bool DockingController::stopModuleIfNeeded()
+{
+    if (!module_started_ || config_.autostart_module.empty())
+    {
+        return true;
+    }
+
+    const ros::Time now = ros::Time::now();
+    if (!last_module_request_time_.isZero() &&
+        (now - last_module_request_time_).toSec() < config_.module_request_interval_sec)
+    {
+        return false;
+    }
+
+    last_module_request_time_ = now;
+
+    scheduler::ControlModuleResponse response;
+    if (!tryCallModuleCommand(config_.autostart_module, "stop", &response))
+    {
+        return false;
+    }
+
+    if (response.success)
+    {
+        module_started_ = false;
+        return true;
+    }
+
+    ROS_WARN_THROTTLE(
+        5.0,
+        "Docking module [%s] failed to stop: %s",
+        config_.autostart_module.c_str(),
+        response.message.c_str());
+    return false;
+}
+
+DockingController::ControlCommand DockingController::buildCommand(State state) const
+{
+    const MotionLimitConfig* limits = nullptr;
+
+    switch (state)
+    {
+    case State::SEARCH_BLUE_LIGHT:
+        limits = &config_.search.command_limits;
+        break;
+    case State::APPROACH_BLUE_LIGHT:
+        limits = &config_.approach.command_limits;
+        break;
+    case State::ALIGN_WITH_DOCK:
+        limits = &config_.align.command_limits;
+        break;
+    case State::ALIGN_WITH_APRILTAG:
+        limits = &config_.align_with_tag.command_limits;
+        break;
+    case State::ENTER_DOCK:
+        limits = &config_.enter_dock.command_limits;
+        break;
+    case State::START:
+    case State::WAIT_CAPTURE:
+    case State::COMPLETED:
+    case State::ERROR:
+        return VehicleCommandInterface::Hold();
+    }
+
+    return VehicleCommandInterface::BodyVelocity(
+        clampValue(data_.surge, -limits->surge, limits->surge),
+        clampValue(data_.sway, -limits->sway, limits->sway),
+        clampValue(data_.heave, -limits->heave, limits->heave),
+        clampValue(data_.yaw, -limits->yaw, limits->yaw));
 }
