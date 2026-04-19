@@ -69,6 +69,7 @@ private:
         double yaw_kp{0.8};
         double heave_kp{0.1};
         int stable_frames{3};
+        int lost_frames_tolerance{10};
         MotionLimitConfig command_limits{0.20, 0.1, 0.1, 0.3};
 
         ros::Time fresh_tolerance_s{5.0};
@@ -87,6 +88,7 @@ private:
         double surge_speed{0.1};
 
         int stable_frames{7};
+        int lost_frames_tolerance{5};
         MotionLimitConfig command_limits{0.1, 0.2, 0.1, 0.2};
 
         ros::Time fresh_tolerance_s{2.0};
@@ -103,6 +105,7 @@ private:
         double heave_kp{0.3};
 
         int stable_frames{10};
+        int lost_frames_tolerance{3};
         MotionLimitConfig command_limits{0.0, 1.0, 0.05, 0.1};
 
         ros::Time fresh_tolerance_s{1.0};
@@ -170,6 +173,10 @@ private:
         int dock_detected_count{0};
         int tag_detected_count{0};
         int tag_stable_count{0};
+
+        int light_lost_count{0};
+        int dock_pose_lost_count{0};
+        int tag_lost_count{0};
 
         bool new_remote_light{false};
         bool new_dock_pose{false};

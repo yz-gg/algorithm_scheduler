@@ -121,6 +121,10 @@ void DockingController::loadParameters()
         "approach/stable_frames",
         config_.approach.stable_frames,
         config_.approach.stable_frames);
+    pnh_.param(
+        "approach/lost_frames_tolerance",
+        config_.approach.lost_frames_tolerance,
+        config_.approach.lost_frames_tolerance);
     loadMotionLimits("approach", &config_.approach.command_limits);
     pnh_.param(
         "approach/fresh_tolerance_s",
@@ -154,6 +158,10 @@ void DockingController::loadParameters()
         "align/stable_frames",
         config_.align.stable_frames,
         config_.align.stable_frames);
+    pnh_.param(
+        "align/lost_frames_tolerance",
+        config_.align.lost_frames_tolerance,
+        config_.align.lost_frames_tolerance);
     loadMotionLimits("align", &config_.align.command_limits);
     pnh_.param(
         "align/fresh_tolerance_s",
@@ -188,6 +196,10 @@ void DockingController::loadParameters()
         "align_with_tag/stable_frames",
         config_.align_with_tag.stable_frames,
         config_.align_with_tag.stable_frames);
+    pnh_.param(
+        "align_with_tag/lost_frames_tolerance",
+        config_.align_with_tag.lost_frames_tolerance,
+        config_.align_with_tag.lost_frames_tolerance);
     loadMotionLimits("align_with_tag", &config_.align_with_tag.command_limits);
     pnh_.param(
         "align_with_tag/fresh_tolerance_s",
@@ -405,6 +417,7 @@ void DockingController::handleSearch()
     if (!data_.blue_light_detected)
     {
         data_.blue_light_detected_count = 0;
+        
     }
 }
 
@@ -418,10 +431,17 @@ void DockingController::handleApproach()
 
         vehicle_->publishCommand(buildCommand(state_));
         data_.new_remote_light = false;
+        data_.light_lost_count = 0;
     }
     else
     {
         vehicle_->publishHold();
+        ++data_.light_lost_count;
+        if (data_.light_lost_count > config_.approach.lost_frames_tolerance)
+        {
+            data_.reset();
+            enterState(State::SEARCH_BLUE_LIGHT, "blue light lost");
+        }
     }
 
     if (data_.dock_pose_valid && data_.new_dock_pose)
@@ -438,6 +458,7 @@ void DockingController::handleApproach()
     else if (!data_.dock_pose_valid)
     {
         data_.dock_detected_count = 0;
+       
     }
 }
 
@@ -455,10 +476,17 @@ void DockingController::handleAlign()
 
         vehicle_->publishCommand(buildCommand(state_));
         data_.new_dock_pose = false;
+        data_.dock_pose_lost_count = 0;
     }
     else
     {
         vehicle_->publishHold();
+        ++data_.dock_pose_lost_count;
+        if (data_.dock_pose_lost_count > config_.align.lost_frames_tolerance)
+        {
+            data_.reset();
+            enterState(State::APPROACH_BLUE_LIGHT, "dock pose lost");
+        }
     }
 
     const bool ready_for_tag = readyForTag();
@@ -492,10 +520,18 @@ void DockingController::handleAlignWithTag()
         data_.yaw = config_.align_with_tag.yaw_kp * data_.tag_yaw_error;
 
         vehicle_->publishCommand(buildCommand(state_));
+        data_.new_tag = false;
+        data_.tag_lost_count = 0;
     }
     else
     {
         vehicle_->publishHold();
+        ++data_.tag_lost_count;
+        if (data_.tag_lost_count > config_.align_with_tag.lost_frames_tolerance)
+        {
+            data_.reset();
+            enterState(State::ALIGN_WITH_DOCK, "apriltag lost");
+        }
     }
 
     const bool ready_for_enter_dock = readyForEnterDock();

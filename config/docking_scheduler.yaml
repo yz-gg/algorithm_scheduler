@@ -55,6 +55,7 @@ approach:
   yaw_kp: 0.8
   heave_kp: 0.1
   stable_frames: 3
+  lost_frames_tolerance : 10
   max_surge: 0.20
   max_sway: 0.1
   max_heave: 0.1
@@ -71,11 +72,12 @@ align:
   heave_kp: 0.5
   surge_speed: 0.1
   stable_frames: 7
+  lost_frames_tolerance : 5
   max_surge: 0.1
   max_sway: 0.2
   max_heave: 0.1
   max_yaw: 0.2
-  fresh_tolerance_s:2.0
+  fresh_tolerance_s: 2.0
 
 align_with_tag:
   yaw_deg_tolerance: 2.0
@@ -85,11 +87,12 @@ align_with_tag:
   sway_kp: 0.3
   heave_kp: 0.3
   stable_frames: 10
+  lost_frames_tolerance : 3
   max_surge: 0.0
   max_sway: 1.0
   max_heave: 0.05
   max_yaw: 0.1
-  fresh_tolerance_s:1.0
+  fresh_tolerance_s: 1.0
 
 enter_dock:
   forward_speed: 0.08
