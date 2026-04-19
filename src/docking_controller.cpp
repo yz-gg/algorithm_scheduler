@@ -122,6 +122,10 @@ void DockingController::loadParameters()
         config_.approach.stable_frames,
         config_.approach.stable_frames);
     loadMotionLimits("approach", &config_.approach.command_limits);
+    pnh_.param(
+        "approach/fresh_tolerance_s",
+        config_.approach.fresh_tolerance_s,
+        config_.approach.fresh_tolerance_s);
 
     pnh_.param(
         "align/yaw_deg_tolerance",
@@ -151,6 +155,10 @@ void DockingController::loadParameters()
         config_.align.stable_frames,
         config_.align.stable_frames);
     loadMotionLimits("align", &config_.align.command_limits);
+    pnh_.param(
+        "align/fresh_tolerance_s",
+        config_.align.fresh_tolerance_s,
+        config_.align.fresh_tolerance_s);
 
     pnh_.param(
         "align_with_tag/yaw_deg_tolerance",
@@ -181,6 +189,10 @@ void DockingController::loadParameters()
         config_.align_with_tag.stable_frames,
         config_.align_with_tag.stable_frames);
     loadMotionLimits("align_with_tag", &config_.align_with_tag.command_limits);
+    pnh_.param(
+        "align_with_tag/fresh_tolerance_s",
+        config_.align_with_tag.fresh_tolerance_s,
+        config_.align_with_tag.fresh_tolerance_s);
 
     pnh_.param(
         "enter_dock/forward_speed",
