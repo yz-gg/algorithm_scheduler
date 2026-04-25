@@ -72,7 +72,7 @@ private:
         int lost_frames_tolerance{10};
         MotionLimitConfig command_limits{0.20, 0.1, 0.1, 0.3};
 
-        ros::Time fresh_tolerance_s{5.0};
+        double fresh_tolerance_s{5.0};
     };
 
     struct AlignConfig
@@ -91,7 +91,7 @@ private:
         int lost_frames_tolerance{5};
         MotionLimitConfig command_limits{0.1, 0.2, 0.1, 0.2};
 
-        ros::Time fresh_tolerance_s{2.0};
+        double fresh_tolerance_s{2.0};
     };
 
     struct AlignWithTagConfig
@@ -108,7 +108,7 @@ private:
         int lost_frames_tolerance{3};
         MotionLimitConfig command_limits{0.0, 1.0, 0.05, 0.1};
 
-        ros::Time fresh_tolerance_s{1.0};
+        double fresh_tolerance_s{1.0};
     };
 
     struct EnterDockConfig

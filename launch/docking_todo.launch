@@ -1,0 +1,4 @@
+<launch>
+  <!-- Placeholder launch so the docking module can be started before the
+       perception/algorithm pipeline is available. -->
+</launch>

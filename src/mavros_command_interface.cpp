@@ -58,7 +58,21 @@ bool MavrosCommandInterface::waitForServices(const ros::Duration& timeout)
     return services_ready;
 }
 
-bool MavrosCommandInterface::setMode(uint32_t custom_mode_id)
+bool MavrosCommandInterface::setMode(const std::string& mode_name)
+{
+    mavros_msgs::SetMode srv;
+    srv.request.base_mode = 0;
+    srv.request.custom_mode = mode_name;
+
+    if (set_mode_client_.call(srv))
+    {
+        return srv.response.mode_sent;
+    }
+
+    return false;
+}
+
+bool MavrosCommandInterface::setCustomMode(uint32_t custom_mode_id)
 {
     mavros_msgs::SetMode srv;
     srv.request.base_mode = 0;

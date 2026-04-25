@@ -608,7 +608,7 @@ void DockingController::RuntimeData::reset()
 void DockingController::BlueLightCB()
 {
     data_.blue_light_detected = false;
-    data.blue_light_yaw_error = 0;
+    data_.blue_light_yaw_error = 0;
 
     data_.new_remote_light = true;
     data_.light_timestamp = ros::Time::now();
@@ -639,17 +639,20 @@ void DockingController::AprilTagCB()
 
 void DockingController::checkObversationFresh()
 {
-    if (ros::Time::now() - data_.light_timestamp > config_.approach.fresh_tolerance_s)
+    if (ros::Time::now() - data_.light_timestamp >
+        ros::Duration(config_.approach.fresh_tolerance_s))
     {
         data_.new_remote_light = false;
     }
 
-    if (ros::Time::now() - data_.dock_pose_timestamp > config_.align.fresh_tolerance_s)
+    if (ros::Time::now() - data_.dock_pose_timestamp >
+        ros::Duration(config_.align.fresh_tolerance_s))
     {
         data_.new_dock_pose = false;
     }
 
-    if (ros::Time::now() - data_.apriltag_timestamp > config_.align_with_tag.fresh_tolerance_s)
+    if (ros::Time::now() - data_.apriltag_timestamp >
+        ros::Duration(config_.align_with_tag.fresh_tolerance_s))
     {
         data_.new_tag = false;
     }

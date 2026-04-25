@@ -43,7 +43,7 @@ public:
 
     virtual bool waitForConnection() = 0;
     virtual bool waitForServices(const ros::Duration& timeout) = 0;
-    virtual bool setMode(uint32_t custom_mode_id) = 0;
+    virtual bool setMode(const std::string& mode_name) = 0;
     virtual bool arm(bool value) = 0;
 
     virtual void publishCommand(const Command& command) = 0;
