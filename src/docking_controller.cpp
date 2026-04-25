@@ -211,15 +211,14 @@ void DockingController::loadParameters()
         config_.enter_dock.forward_speed,
         config_.enter_dock.forward_speed);
     pnh_.param(
+        "enter_dock/complete_distance_m",
+        config_.enter_dock.complete_distance_m,
+        config_.enter_dock.complete_distance_m);
+    pnh_.param(
         "enter_dock/max_duration_sec",
         config_.enter_dock.max_duration_sec,
         config_.enter_dock.max_duration_sec);
     loadMotionLimits("enter_dock", &config_.enter_dock.command_limits);
-
-    pnh_.param(
-        "capture/timeout_sec",
-        config_.capture.timeout_sec,
-        config_.capture.timeout_sec);
 }
 
 void DockingController::loadMotionLimits(
@@ -258,9 +257,6 @@ void DockingController::step()
         break;
     case State::ENTER_DOCK:
         handleEnterDock();
-        break;
-    case State::WAIT_CAPTURE:
-        handleCaptured();
         break;
     case State::COMPLETED:
         handleCompleted();
@@ -305,8 +301,6 @@ std::string DockingController::stateToString(State state) const
         return "ALIGN_WITH_APRILTAG";
     case State::ENTER_DOCK:
         return "ENTER_DOCK";
-    case State::WAIT_CAPTURE:
-        return "WAIT_CAPTURE";
     case State::COMPLETED:
         return "COMPLETED";
     case State::ERROR:
@@ -428,6 +422,7 @@ void DockingController::handleApproach()
         data_.clearCommand();
         data_.yaw = config_.approach.yaw_kp * data_.blue_light_yaw_error;
         data_.surge = config_.approach.forward_speed;
+        data_.heave = config_.approach.heave_kp * data_.blue_light_heave_error;
 
         vehicle_->publishCommand(buildCommand(state_));
         data_.new_remote_light = false;
@@ -557,6 +552,13 @@ void DockingController::handleAlignWithTag()
 
 void DockingController::handleEnterDock()
 {
+    if (readyForDockComplete())
+    {
+        vehicle_->publishHold();
+        enterState(State::COMPLETED, "apriltag distance reached");
+        return;
+    }
+
     data_.clearCommand();
     data_.surge = config_.enter_dock.forward_speed;
     vehicle_->publishCommand(buildCommand(state_));
@@ -564,24 +566,7 @@ void DockingController::handleEnterDock()
     if (config_.enter_dock.max_duration_sec > 0.0 &&
         stateElapsedSec() >= config_.enter_dock.max_duration_sec)
     {
-        enterState(State::WAIT_CAPTURE, "enter dock duration reached");
-    }
-}
-
-void DockingController::handleCaptured()
-{
-    vehicle_->publishHold();
-
-    if (data_.captured)
-    {
-        enterState(State::COMPLETED, "capture feedback received");
-        return;
-    }
-
-    if (config_.capture.timeout_sec > 0.0 &&
-        stateElapsedSec() >= config_.capture.timeout_sec)
-    {
-        enterState(State::ERROR, "capture wait timed out");
+        enterState(State::ERROR, "enter dock timed out before apriltag distance reached");
     }
 }
 
@@ -609,6 +594,7 @@ void DockingController::BlueLightCB()
 {
     data_.blue_light_detected = false;
     data_.blue_light_yaw_error = 0;
+    data_.blue_light_heave_error = 0;
 
     data_.new_remote_light = true;
     data_.light_timestamp = ros::Time::now();
@@ -632,6 +618,7 @@ void DockingController::AprilTagCB()
     data_.tag_sway_error = 0;
     data_.tag_yaw_error = 0;
     data_.tag_depth_error = 0;
+    data_.tag_distance = 0;
 
     data_.new_tag = true;
     data_.apriltag_timestamp = ros::Time::now();
@@ -679,6 +666,12 @@ bool DockingController::readyForEnterDock() const
     return std::abs(data_.tag_yaw_error) <= config_.align_with_tag.yaw_deg_tolerance &&
            std::abs(data_.tag_depth_error) <= config_.align_with_tag.depth_m_tolerance &&
            std::abs(data_.tag_sway_error) <= config_.align_with_tag.sway_m_tolerance;
+}
+
+bool DockingController::readyForDockComplete() const
+{
+    return data_.apriltag_detected &&
+           data_.tag_distance <= config_.enter_dock.complete_distance_m;
 }
 
 bool DockingController::tryCallModuleCommand(
@@ -768,7 +761,6 @@ DockingController::ControlCommand DockingController::buildCommand(State state) c
         limits = &config_.enter_dock.command_limits;
         break;
     case State::START:
-    case State::WAIT_CAPTURE:
     case State::COMPLETED:
     case State::ERROR:
         return VehicleCommandInterface::Hold();

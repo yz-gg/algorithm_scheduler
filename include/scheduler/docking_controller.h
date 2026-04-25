@@ -29,7 +29,6 @@ private:
         ALIGN_WITH_DOCK,
         ALIGN_WITH_APRILTAG,
         ENTER_DOCK,
-        WAIT_CAPTURE,
         COMPLETED,
         ERROR,
     };
@@ -114,13 +113,9 @@ private:
     struct EnterDockConfig
     {
         double forward_speed{0.08};
+        double complete_distance_m{0.15};
         double max_duration_sec{8.0};
         MotionLimitConfig command_limits{0.08, 0.0, 0.0, 0.0};
-    };
-
-    struct CaptureConfig
-    {
-        double timeout_sec{20.0};
     };
 
     struct Config
@@ -143,7 +138,6 @@ private:
         AlignConfig align;
         AlignWithTagConfig align_with_tag;
         EnterDockConfig enter_dock;
-        CaptureConfig capture;
     };
 
     struct RuntimeData
@@ -156,9 +150,9 @@ private:
         bool blue_light_detected{false};
         bool dock_pose_valid{false};
         bool apriltag_detected{false};
-        bool captured{false};
 
         double blue_light_yaw_error{0.0};
+        double blue_light_heave_error{0.0};
 
         double dock_yaw_error{0.0};
         double dock_depth_error{0.0};
@@ -168,6 +162,7 @@ private:
         double tag_sway_error{0.0};
         double tag_yaw_error{0.0};
         double tag_depth_error{0.0};
+        double tag_distance{0.0};
 
         int blue_light_detected_count{0};
         int dock_detected_count{0};
@@ -222,7 +217,6 @@ private:
     void handleAlign();
     void handleAlignWithTag();
     void handleEnterDock();
-    void handleCaptured();
     void handleCompleted();
     void handleError();
 
@@ -234,6 +228,7 @@ private:
 
     bool readyForTag() const;
     bool readyForEnterDock() const;
+    bool readyForDockComplete() const;
 
     bool tryCallModuleCommand(
         const std::string& module_name,
