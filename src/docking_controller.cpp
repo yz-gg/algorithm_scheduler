@@ -2,13 +2,80 @@
 
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
+#include <sstream>
 #include <utility>
+
+#include <boost/property_tree/json_parser.hpp>
+#include <boost/property_tree/ptree.hpp>
 
 namespace
 {
 double clampValue(double value, double min_value, double max_value)
 {
     return std::max(min_value, std::min(value, max_value));
+}
+
+boost::property_tree::ptree parseJsonPayload(const std::string& payload)
+{
+    std::istringstream stream(payload);
+    boost::property_tree::ptree tree;
+    boost::property_tree::read_json(stream, tree);
+    return tree;
+}
+
+bool getBool(
+    const boost::property_tree::ptree& tree,
+    const std::string& key,
+    bool fallback)
+{
+    return tree.get<bool>(key, fallback);
+}
+
+bool getDouble(
+    const boost::property_tree::ptree& tree,
+    const std::string& key,
+    double* value)
+{
+    const auto optional_value = tree.get_optional<double>(key);
+    if (!optional_value)
+    {
+        return false;
+    }
+
+    *value = optional_value.get();
+    return true;
+}
+
+double getDoubleOr(
+    const boost::property_tree::ptree& tree,
+    const std::string& key,
+    double fallback)
+{
+    double value = fallback;
+    getDouble(tree, key, &value);
+    return value;
+}
+
+bool readAnyDouble(
+    const boost::property_tree::ptree& tree,
+    const std::initializer_list<const char*>& keys,
+    double* value)
+{
+    for (const char* key : keys)
+    {
+        if (getDouble(tree, key, value))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+double degreesToRadians(double value)
+{
+    return value * M_PI / 180.0;
 }
 }
 
@@ -21,6 +88,33 @@ DockingController::DockingController(
     , vehicle_(vehicle)
 {
     loadParameters();
+
+    if (!config_.blue_light_topic.empty())
+    {
+        blue_light_sub_ = nh_.subscribe<std_msgs::String>(
+            config_.blue_light_topic,
+            10,
+            &DockingController::BlueLightCB,
+            this);
+    }
+
+    if (!config_.dock_pose_topic.empty())
+    {
+        dock_pose_sub_ = nh_.subscribe<std_msgs::String>(
+            config_.dock_pose_topic,
+            10,
+            &DockingController::DockPoseCB,
+            this);
+    }
+
+    if (!config_.apriltag_topic.empty())
+    {
+        apriltag_sub_ = nh_.subscribe<std_msgs::String>(
+            config_.apriltag_topic,
+            10,
+            &DockingController::AprilTagCB,
+            this);
+    }
 
     module_control_client_ = nh_.serviceClient<scheduler::ControlModule>(
         "/launch_manager_node/control_module");
@@ -587,38 +681,157 @@ void DockingController::RuntimeData::reset()
     *this = RuntimeData{};
 }
 
-/* todo
-    topic
-*/
-void DockingController::BlueLightCB()
+void DockingController::BlueLightCB(const std_msgs::String::ConstPtr& msg)
 {
-    data_.blue_light_detected = false;
-    data_.blue_light_yaw_error = 0;
-    data_.blue_light_heave_error = 0;
+    try
+    {
+        const boost::property_tree::ptree tree = parseJsonPayload(msg->data);
+        const bool detected = getBool(
+            tree,
+            "light_detected",
+            getBool(tree, "detected", false));
+
+        double yaw_error = 0.0;
+        double heave_error = 0.0;
+        if (!readAnyDouble(
+                tree,
+                {"yaw_error_rad", "angle_error_rad.yaw", "angle_error.yaw_rad"},
+                &yaw_error))
+        {
+            double yaw_error_deg = 0.0;
+            if (readAnyDouble(
+                    tree,
+                    {"yaw_error_deg", "angle_error_deg.yaw", "angle_error.yaw_deg"},
+                    &yaw_error_deg))
+            {
+                yaw_error = degreesToRadians(yaw_error_deg);
+            }
+        }
+
+        if (!readAnyDouble(
+                tree,
+                {"heave_error_rad", "pitch_error_rad", "angle_error_rad.heave",
+                 "angle_error_rad.pitch", "angle_error.heave_rad",
+                 "angle_error.pitch_rad"},
+                &heave_error))
+        {
+            double heave_error_deg = 0.0;
+            if (readAnyDouble(
+                    tree,
+                    {"heave_error_deg", "pitch_error_deg", "angle_error_deg.heave",
+                     "angle_error_deg.pitch", "angle_error.heave_deg",
+                     "angle_error.pitch_deg"},
+                    &heave_error_deg))
+            {
+                heave_error = degreesToRadians(heave_error_deg);
+            }
+        }
+
+        data_.blue_light_detected = detected;
+        data_.blue_light_yaw_error = detected ? yaw_error : 0.0;
+        data_.blue_light_heave_error = detected ? heave_error : 0.0;
+    }
+    catch (const std::exception& exc)
+    {
+        ROS_WARN_THROTTLE(
+            2.0,
+            "Failed to parse blue light JSON: %s",
+            exc.what());
+        data_.blue_light_detected = false;
+        data_.blue_light_yaw_error = 0.0;
+        data_.blue_light_heave_error = 0.0;
+    }
 
     data_.new_remote_light = true;
     data_.light_timestamp = ros::Time::now();
 }
 
-void DockingController::DockPoseCB()
+void DockingController::DockPoseCB(const std_msgs::String::ConstPtr& msg)
 {
-    data_.dock_pose_valid = false;
-    data_.dock_yaw_error = 0;
-    data_.dock_depth_error = 0;
-    data_.dock_sway_error = 0;
-    data_.dock_distance = 0;
+    try
+    {
+        const boost::property_tree::ptree tree = parseJsonPayload(msg->data);
+        const bool pose_detected = getBool(
+            tree,
+            "pose_detected",
+            getBool(tree, "detected", false));
+
+        data_.dock_pose_valid = pose_detected;
+        data_.dock_yaw_error = pose_detected ?
+            getDoubleOr(tree, "euler_deg.yaw", getDoubleOr(tree, "yaw_error_deg", 0.0)) :
+            0.0;
+        data_.dock_sway_error = pose_detected ?
+            getDoubleOr(tree, "position_m.x", getDoubleOr(tree, "sway_error_m", 0.0)) :
+            0.0;
+        data_.dock_depth_error = pose_detected ?
+            getDoubleOr(tree, "position_m.y", getDoubleOr(tree, "depth_error_m", 0.0)) :
+            0.0;
+        data_.dock_distance = pose_detected ?
+            getDoubleOr(tree, "position_m.z", getDoubleOr(tree, "distance_m", 0.0)) :
+            0.0;
+    }
+    catch (const std::exception& exc)
+    {
+        ROS_WARN_THROTTLE(
+            2.0,
+            "Failed to parse dock pose JSON: %s",
+            exc.what());
+        data_.dock_pose_valid = false;
+        data_.dock_yaw_error = 0.0;
+        data_.dock_depth_error = 0.0;
+        data_.dock_sway_error = 0.0;
+        data_.dock_distance = 0.0;
+    }
 
     data_.new_dock_pose = true;
     data_.dock_pose_timestamp = ros::Time::now();
 }
 
-void DockingController::AprilTagCB()
+void DockingController::AprilTagCB(const std_msgs::String::ConstPtr& msg)
 {
-    data_.apriltag_detected = false;
-    data_.tag_sway_error = 0;
-    data_.tag_yaw_error = 0;
-    data_.tag_depth_error = 0;
-    data_.tag_distance = 0;
+    try
+    {
+        const boost::property_tree::ptree tree = parseJsonPayload(msg->data);
+        const bool detected = getBool(tree, "detected", false);
+
+        data_.apriltag_detected = detected;
+        data_.tag_yaw_error = detected ?
+            getDoubleOr(
+                tree,
+                "tag_euler_deg.yaw",
+                getDoubleOr(tree, "yaw_error_deg", 0.0)) :
+            0.0;
+        data_.tag_sway_error = detected ?
+            getDoubleOr(
+                tree,
+                "camera_position_in_tag_m.x",
+                getDoubleOr(tree, "sway_error_m", 0.0)) :
+            0.0;
+        data_.tag_depth_error = detected ?
+            getDoubleOr(
+                tree,
+                "camera_position_in_tag_m.y",
+                getDoubleOr(tree, "depth_error_m", 0.0)) :
+            0.0;
+        data_.tag_distance = detected ?
+            getDoubleOr(
+                tree,
+                "camera_position_in_tag_m.z",
+                getDoubleOr(tree, "distance_m", 0.0)) :
+            0.0;
+    }
+    catch (const std::exception& exc)
+    {
+        ROS_WARN_THROTTLE(
+            2.0,
+            "Failed to parse apriltag JSON: %s",
+            exc.what());
+        data_.apriltag_detected = false;
+        data_.tag_sway_error = 0.0;
+        data_.tag_yaw_error = 0.0;
+        data_.tag_depth_error = 0.0;
+        data_.tag_distance = 0.0;
+    }
 
     data_.new_tag = true;
     data_.apriltag_timestamp = ros::Time::now();

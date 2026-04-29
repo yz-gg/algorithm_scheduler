@@ -4,6 +4,7 @@
 #include <string>
 
 #include <ros/ros.h>
+#include <std_msgs/String.h>
 
 #include <scheduler/ControlModule.h>
 #include <scheduler/mission_controller.h>
@@ -192,6 +193,9 @@ private:
     VehicleCommandInterface* vehicle_;
 
     ros::ServiceClient module_control_client_;
+    ros::Subscriber blue_light_sub_;
+    ros::Subscriber dock_pose_sub_;
+    ros::Subscriber apriltag_sub_;
 
     Config config_;
     RuntimeData data_;
@@ -220,9 +224,9 @@ private:
     void handleCompleted();
     void handleError();
 
-    void BlueLightCB();
-    void DockPoseCB();
-    void AprilTagCB();
+    void BlueLightCB(const std_msgs::String::ConstPtr& msg);
+    void DockPoseCB(const std_msgs::String::ConstPtr& msg);
+    void AprilTagCB(const std_msgs::String::ConstPtr& msg);
 
     void checkObversationFresh();
 

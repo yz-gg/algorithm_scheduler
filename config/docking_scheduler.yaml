@@ -23,9 +23,9 @@ autostart_module: "docking"
 
 # Input topics for the perception modules used by docking.
 topics:
-  blue_light: ""
-  dock_pose: ""
-  apriltag: ""
+  blue_light: "/docking/blue_light"
+  dock_pose: "/docking/dock_pose"
+  apriltag: "/docking/apriltag"
 
 # Whether the docking state machine starts by requesting the autostart module.
 auto_start_inspection: true

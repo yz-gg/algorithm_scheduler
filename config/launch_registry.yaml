@@ -12,13 +12,17 @@ modules:
       restart_delay_sec: 1.0
   docking:
     package: scheduler
-    launch: docking_todo.launch
+    launch: docking_algorithm.launch
     description: "Docking perception module wrapper"
     arguments:
-      use_external_process: true
-      python_executable: /home/orangepi/anaconda3/envs/gs_new/bin/python
-      algorithm_script: /home/orangepi/
-      algorithm_working_directory: /home/orangepi/
-      restart_on_exit: true
-      restart_delay_sec: 1.0
-
+      blue_light_topic: /docking/blue_light
+      dock_pose_topic: /docking/dock_pose
+      apriltag_topic: /docking/apriltag
+      light_json_file: /home/sodaoh258/pose_data.json
+      apriltag_json_file: /home/sodaoh258/apriltag_pose.json
+      poll_rate_hz: 20.0
+      start_light_detector: true
+      start_apriltag_detector: true
+      light_camera_index: 1
+      apriltag_camera_index: 0
+      show_debug_windows: false
