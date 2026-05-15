@@ -2,8 +2,8 @@
   <arg name="blue_light_topic" default="/docking/blue_light"/>
   <arg name="dock_pose_topic" default="/docking/dock_pose"/>
   <arg name="apriltag_topic" default="/docking/apriltag"/>
-  <arg name="light_json_file" default="pose_data.json"/>
-  <arg name="apriltag_json_file" default="apriltag_pose.json"/>
+  <arg name="light_json_file" default="$(find scheduler)/../../runtime/docking/pose_data.json"/>
+  <arg name="apriltag_json_file" default="$(find scheduler)/../../runtime/docking/apriltag_pose.json"/>
   <arg name="poll_rate_hz" default="20.0"/>
   <arg name="start_light_detector" default="true"/>
   <arg name="start_apriltag_detector" default="true"/>

@@ -26,9 +26,19 @@ class LaunchManager(object):
         self.registry = {}
         self.lock = threading.Lock()
         self.rospack = rospkg.RosPack()
+        self.workspace_root = self._resolve_workspace_root(
+            self.rospack.get_path("scheduler")
+        )
         self.uuid = roslaunch.rlutil.get_or_generate_uuid(None, False)
         roslaunch.configure_logging(self.uuid)
         self.build_registry()
+
+    def _resolve_workspace_root(self, package_path):
+        package_path = os.path.abspath(package_path)
+        package_parent = os.path.dirname(package_path)
+        if os.path.basename(package_parent) == "src":
+            return os.path.dirname(package_parent)
+        return package_path
 
     def build_registry(self):
         config_file = yaml_path
@@ -61,6 +71,8 @@ class LaunchManager(object):
             for key, value in arguments.items():
                 if isinstance(value, bool):
                     value = "true" if value else "false"
+                if self._is_workspace_relative_file_arg(key, value):
+                    value = os.path.join(self.workspace_root, str(value))
                 normalized.append("{}:={}".format(str(key), str(value)))
             return normalized
 
@@ -71,6 +83,13 @@ class LaunchManager(object):
             return [arguments] if arguments.strip() else []
 
         raise TypeError("unsupported launch arguments type: {}".format(type(arguments)))
+
+    def _is_workspace_relative_file_arg(self, key, value):
+        if not isinstance(value, str):
+            return False
+        if os.path.isabs(value) or value.startswith("~"):
+            return False
+        return key in ("light_json_file", "apriltag_json_file")
 
     def _resolve_launch_file(self, package, launch_name):
         package_path = self.rospack.get_path(package)

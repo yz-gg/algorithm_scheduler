@@ -6,11 +6,6 @@
 #include <memory>
 #include <string>
 
-namespace
-{
-constexpr uint32_t kDockingCustomModeId = 23;
-}
-
 int main(int argc, char** argv)
 {
     ros::init(argc, argv, "scheduler_node");
@@ -60,23 +55,10 @@ int main(int argc, char** argv)
     bool mode_set = true;
     if (set_flight_mode_on_start)
     {
-        if (mission_type == "dock" || mission_type == "docking")
+        mode_set = mavros.setMode(flight_mode);
+        if (!mode_set)
         {
-            mode_set = mavros.setCustomMode(kDockingCustomModeId);
-            if (!mode_set)
-            {
-                ROS_WARN(
-                    "Failed to set flight mode to docking custom mode %u",
-                    kDockingCustomModeId);
-            }
-        }
-        else
-        {
-            mode_set = mavros.setMode(flight_mode);
-            if (!mode_set)
-            {
-                ROS_WARN("Failed to set flight mode to %s", flight_mode.c_str());
-            }
+            ROS_WARN("Failed to set flight mode to %s", flight_mode.c_str());
         }
     }
 
