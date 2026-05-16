@@ -1,5 +1,9 @@
 <launch>
-  <include file="$(find mavros)/launch/apm.launch"/>
+  <arg name="fcu_url" default="serial:///dev/ttyACM0:57600?ids=255,240"/>
+
+  <include file="$(find mavros)/launch/apm.launch">
+    <arg name="fcu_url" value="$(arg fcu_url)"/>
+  </include>
 
   <node pkg="scheduler" type="scheduler_launch.py" name="launch_manager_node" output="screen"/>
 
