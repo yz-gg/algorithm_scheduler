@@ -4,6 +4,7 @@
 #include <utility>
 
 #include <scheduler/pipeline_inspection_controller.h>
+#include <scheduler/docking_controller.h>
 #include <scheduler/simple_mission_controller.h>
 
 std::unique_ptr<MissionController> CreateMissionController(
@@ -43,12 +44,10 @@ std::unique_ptr<MissionController> CreateMissionController(
     if (mission_type == "dock" || mission_type == "docking")
     {
         return std::unique_ptr<MissionController>(
-            new SimpleMissionController(
+            new DockingController(
                 std::move(nh),
                 std::move(pnh),
-                vehicle,
-                "docking",
-                "docking"));
+                vehicle));
     }
 
     return std::unique_ptr<MissionController>();

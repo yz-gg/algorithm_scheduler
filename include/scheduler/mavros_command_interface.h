@@ -19,6 +19,7 @@ public:
     bool waitForConnection() override;
     bool waitForServices(const ros::Duration& timeout) override;
     bool setMode(const std::string& mode_name) override;
+    bool setCustomMode(uint32_t custom_mode_id);
     bool arm(bool value) override;
 
     void publishCommand(const Command& command) override;

@@ -72,6 +72,27 @@ bool MavrosCommandInterface::setMode(const std::string& mode_name)
     return false;
 }
 
+bool MavrosCommandInterface::setCustomMode(uint32_t custom_mode_id)
+{
+    mavros_msgs::SetMode srv;
+    srv.request.base_mode = 0;
+    srv.request.custom_mode = std::to_string(custom_mode_id);
+
+    ROS_INFO("Request mode switch: base_mode=%u, custom_mode=%s",
+             srv.request.base_mode,
+             srv.request.custom_mode.c_str());
+
+    if (set_mode_client_.call(srv))
+    {
+        return srv.response.mode_sent;
+    }
+
+    ROS_INFO("SetMode response: mode_sent=%s",
+             srv.response.mode_sent ? "true" : "false");
+
+    return false;
+}
+
 bool MavrosCommandInterface::arm(bool value)
 {
     mavros_msgs::CommandBool srv;

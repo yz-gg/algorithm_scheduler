@@ -10,3 +10,28 @@ modules:
       algorithm_working_directory: /home/orangepi/PycharmProjects/PythonProject/pipe
       restart_on_exit: true
       restart_delay_sec: 1.0
+  docking:
+    package: scheduler
+    launch: docking_algorithm.launch
+    description: "Docking perception module wrapper"
+    arguments:
+      blue_light_topic: /docking/blue_light
+      dock_pose_topic: /docking/dock_pose
+      apriltag_topic: /docking/apriltag
+      light_json_file: runtime/docking/pose_data.jsonl
+      apriltag_json_file: runtime/docking/apriltag_pose.jsonl
+      start_light_detector: true
+      start_apriltag_detector: true
+      camera_index: 0
+      frame_width: 0
+      frame_height: 0
+      fx: 1115.5075
+      fy: 1116.0352
+      cx: 692.3729
+      cy: 503.0312
+      threshold: 240
+      kernel_size: 7
+      epsilon: 0.02
+      publish_topics: true
+      write_json: false
+      show_debug_windows: false

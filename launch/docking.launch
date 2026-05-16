@@ -1,0 +1,14 @@
+<launch>
+    <arg name="wait_for_fcu_connection" default="true"/>
+    <arg name="set_flight_mode_on_start" default="true"/>
+    <arg name="auto_arm" default="true"/>
+
+    <node pkg="scheduler" type="scheduler_launch.py" name="launch_manager_node" output="screen"/>
+
+    <node pkg="scheduler" type="scheduler_node" name="scheduler_node" output="screen">
+        <rosparam command="load" file="$(find scheduler)/config/docking_scheduler.yaml"/>
+        <param name="wait_for_fcu_connection" value="$(arg wait_for_fcu_connection)"/>
+        <param name="set_flight_mode_on_start" value="$(arg set_flight_mode_on_start)"/>
+        <param name="auto_arm" value="$(arg auto_arm)"/>
+    </node>
+</launch>

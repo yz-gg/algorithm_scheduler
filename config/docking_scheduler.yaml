@@ -1,0 +1,106 @@
+# Mission controller selected by scheduler_node. Supported values:
+# pipeline_inspection, cage_inspection, dam_inspection, docking.
+mission_type: "docking"
+
+# Generic flight mode used by scheduler_node before any mission logic starts.
+flight_mode: "GUIDED"
+
+# Whether scheduler_node should block until /mavros/state reports FCU connected.
+wait_for_fcu_connection: true
+
+# Whether scheduler_node should request flight mode switch on startup.
+set_flight_mode_on_start: true
+
+# Whether scheduler_node should send an arm command on startup.
+auto_arm: true
+
+# Maximum time spent waiting for MAVROS services to appear.
+mavros_service_wait_sec: 5.0
+
+# Module name registered in launch_registry.yaml. The controller asks the launch
+# manager to start this module automatically.
+autostart_module: "docking"
+
+# Input topics for the perception modules used by docking.
+topics:
+  blue_light: "/docking/blue_light"
+  dock_pose: "/docking/dock_pose"
+  apriltag: "/docking/apriltag"
+
+# Whether the docking state machine starts by requesting the autostart module.
+auto_start_inspection: true
+
+# Main control loop frequency.
+command_rate_hz: 20.0
+
+# Reserved observation freshness timeout.
+observation_timeout_sec: 0.5
+
+# Launch manager service throttling.
+module_request_interval_sec: 1.0
+service_wait_sec: 0.2
+
+search:
+  scan_yaw_rate: 0.3141592653589793
+  timeout_sec: 40.0
+  retry_times: 3
+  stable_frames: 30
+  max_surge: 0.0
+  max_sway: 0.0
+  max_heave: 0.0
+  max_yaw: 0.2
+
+approach:
+  forward_speed: 0.20
+  yaw_kp: 0.8
+  heave_kp: 0.1
+  stable_frames: 20
+  lost_frames_tolerance : 15
+  max_surge: 0.20
+  max_sway: 0.1
+  max_heave: 0.1
+  max_yaw: 0.3
+  fresh_tolerance_s: 5.0
+
+align:
+  yaw_deg_tolerance: 5.0
+  depth_m_tolerance: 0.08
+  sway_m_tolerance: 0.07
+  dist_tolerance: 0.3
+  yaw_kp: 0.6
+  sway_kp: 0.5
+  heave_kp: 0.5
+  surge_speed: 0.1
+  stable_frames: 7
+  lost_frames_tolerance : 5
+  max_surge: 0.1
+  max_sway: 0.2
+  max_heave: 0.1
+  max_yaw: 0.2
+  fresh_tolerance_s: 2.0
+
+align_with_tag:
+  yaw_deg_tolerance: 2.0
+  depth_m_tolerance: 0.04
+  sway_m_tolerance: 0.03
+  yaw_kp: 0.4
+  sway_kp: 0.3
+  heave_kp: 0.3
+  stable_frames: 10
+  lost_frames_tolerance : 3
+  max_surge: 0.0
+  max_sway: 1.0
+  max_heave: 0.05
+  max_yaw: 0.1
+  fresh_tolerance_s: 1.0
+
+enter_dock:
+  forward_speed: 0.08
+  max_duration_sec: 8.0
+  max_surge: 0.08
+  max_sway: 0.0
+  max_heave: 0.0
+  max_yaw: 0.0
+
+capture:
+  timeout_sec: 20.0

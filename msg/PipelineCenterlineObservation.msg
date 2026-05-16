@@ -1,4 +1,4 @@
-﻿std_msgs/Header header
+std_msgs/Header header
 
 bool detected
 float32 confidence
