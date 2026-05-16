@@ -18,7 +18,7 @@ except ImportError:
     String = None
 
 
-INIT_THRESH = 200
+INIT_THRESH = 240
 INIT_KERNEL_SIZE = 7
 INIT_EPSILON = 0.02
 

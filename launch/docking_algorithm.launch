@@ -7,12 +7,15 @@
   <arg name="start_light_detector" default="true"/>
   <arg name="start_apriltag_detector" default="true"/>
   <arg name="camera_index" default="0"/>
-  <arg name="frame_width" default="640"/>
-  <arg name="frame_height" default="240"/>
+  <arg name="frame_width" default="0"/>
+  <arg name="frame_height" default="0"/>
   <arg name="fx" default="1115.5075"/>
   <arg name="fy" default="1116.0352"/>
-  <arg name="cx" default="-1.0"/>
-  <arg name="cy" default="-1.0"/>
+  <arg name="cx" default="692.3729"/>
+  <arg name="cy" default="503.0312"/>
+  <arg name="threshold" default="240"/>
+  <arg name="kernel_size" default="7"/>
+  <arg name="epsilon" default="0.02"/>
   <arg name="show_debug_windows" default="false"/>
   <arg name="publish_topics" default="true"/>
   <arg name="write_json" default="false"/>
@@ -29,6 +32,9 @@
     <param name="fy" value="$(arg fy)"/>
     <param name="cx" value="$(arg cx)"/>
     <param name="cy" value="$(arg cy)"/>
+    <param name="threshold" value="$(arg threshold)"/>
+    <param name="kernel_size" value="$(arg kernel_size)"/>
+    <param name="epsilon" value="$(arg epsilon)"/>
     <param name="enable_light" value="$(arg start_light_detector)"/>
     <param name="enable_apriltag" value="$(arg start_apriltag_detector)"/>
     <param name="light_json_file" value="$(arg light_json_file)"/>

@@ -18,7 +18,7 @@ except ImportError:
     String = None
 
 
-INIT_THRESH = 200
+INIT_THRESH = 240
 INIT_KERNEL_SIZE = 7
 INIT_EPSILON = 0.02
 
@@ -324,8 +324,8 @@ def detect_apriltag(frame, detector, camera_matrix, tag_size, undistort, dist_co
 def get_camera_matrix(frame_width, frame_height):
     fx = float(get_param("fx", DEFAULT_FX))
     fy = float(get_param("fy", DEFAULT_FY))
-    cx = float(get_param("cx", -1.0))
-    cy = float(get_param("cy", -1.0))
+    cx = float(get_param("cx", DEFAULT_CX))
+    cy = float(get_param("cy", DEFAULT_CY))
     if cx < 0.0:
         cx = frame_width * 0.5
     if cy < 0.0:
