@@ -57,7 +57,7 @@ catkin_install_python(PROGRAMS
   scripts/scheduler_launch.py
   scripts/pipeline_detection_stub.py
   scripts/external_pipeline_algorithm_bridge.py
-  scripts/external_docking_json_bridge.py
+  scripts/docking_vision_detector.py
   scripts/docking_light_strip_detector.py
   scripts/docking_apriltag_detector.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

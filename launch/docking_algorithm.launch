@@ -2,47 +2,42 @@
   <arg name="blue_light_topic" default="/docking/blue_light"/>
   <arg name="dock_pose_topic" default="/docking/dock_pose"/>
   <arg name="apriltag_topic" default="/docking/apriltag"/>
-  <arg name="light_json_file" default="$(find scheduler)/../../runtime/docking/pose_data.json"/>
-  <arg name="apriltag_json_file" default="$(find scheduler)/../../runtime/docking/apriltag_pose.json"/>
-  <arg name="poll_rate_hz" default="20.0"/>
+  <arg name="light_json_file" default="$(find scheduler)/../../runtime/docking/pose_data.jsonl"/>
+  <arg name="apriltag_json_file" default="$(find scheduler)/../../runtime/docking/apriltag_pose.jsonl"/>
   <arg name="start_light_detector" default="true"/>
   <arg name="start_apriltag_detector" default="true"/>
-  <arg name="light_camera_index" default="1"/>
-  <arg name="apriltag_camera_index" default="0"/>
+  <arg name="camera_index" default="0"/>
+  <arg name="frame_width" default="640"/>
+  <arg name="frame_height" default="240"/>
+  <arg name="fx" default="1115.5075"/>
+  <arg name="fy" default="1116.0352"/>
+  <arg name="cx" default="-1.0"/>
+  <arg name="cy" default="-1.0"/>
   <arg name="show_debug_windows" default="false"/>
-
-  <node
-    if="$(arg start_light_detector)"
-    pkg="scheduler"
-    type="docking_light_strip_detector.py"
-    name="docking_light_strip_detector"
-    output="screen">
-    <param name="camera_index" value="$(arg light_camera_index)"/>
-    <param name="json_output_file" value="$(arg light_json_file)"/>
-    <param name="show_debug_windows" value="$(arg show_debug_windows)"/>
-  </node>
-
-  <node
-    if="$(arg start_apriltag_detector)"
-    pkg="scheduler"
-    type="docking_apriltag_detector.py"
-    name="docking_apriltag_detector"
-    output="screen">
-    <param name="camera_index" value="$(arg apriltag_camera_index)"/>
-    <param name="json_output_file" value="$(arg apriltag_json_file)"/>
-    <param name="show_debug_windows" value="$(arg show_debug_windows)"/>
-  </node>
+  <arg name="publish_topics" default="true"/>
+  <arg name="write_json" default="false"/>
 
   <node
     pkg="scheduler"
-    type="external_docking_json_bridge.py"
-    name="docking_json_bridge"
+    type="docking_vision_detector.py"
+    name="docking_vision_detector"
     output="screen">
+    <param name="camera_index" value="$(arg camera_index)"/>
+    <param name="frame_width" value="$(arg frame_width)"/>
+    <param name="frame_height" value="$(arg frame_height)"/>
+    <param name="fx" value="$(arg fx)"/>
+    <param name="fy" value="$(arg fy)"/>
+    <param name="cx" value="$(arg cx)"/>
+    <param name="cy" value="$(arg cy)"/>
+    <param name="enable_light" value="$(arg start_light_detector)"/>
+    <param name="enable_apriltag" value="$(arg start_apriltag_detector)"/>
+    <param name="light_json_file" value="$(arg light_json_file)"/>
+    <param name="apriltag_json_file" value="$(arg apriltag_json_file)"/>
+    <param name="write_json" value="$(arg write_json)"/>
+    <param name="publish_topics" value="$(arg publish_topics)"/>
     <param name="blue_light_topic" value="$(arg blue_light_topic)"/>
     <param name="dock_pose_topic" value="$(arg dock_pose_topic)"/>
     <param name="apriltag_topic" value="$(arg apriltag_topic)"/>
-    <param name="light_json_file" value="$(arg light_json_file)"/>
-    <param name="apriltag_json_file" value="$(arg apriltag_json_file)"/>
-    <param name="poll_rate_hz" value="$(arg poll_rate_hz)"/>
+    <param name="show_debug_windows" value="$(arg show_debug_windows)"/>
   </node>
 </launch>

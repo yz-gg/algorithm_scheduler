@@ -5,7 +5,6 @@ import json
 import math
 import os
 import sys
-import tempfile
 import time
 
 import cv2
@@ -13,8 +12,10 @@ import numpy as np
 
 try:
     import rospy
+    from std_msgs.msg import String
 except ImportError:
     rospy = None
+    String = None
 
 
 INIT_THRESH = 200
@@ -44,6 +45,16 @@ def get_param(name, default):
 
 def should_shutdown():
     return rospy is not None and rospy.core.is_initialized() and rospy.is_shutdown()
+
+
+def publish_json(publishers, data):
+    if not publishers:
+        return
+
+    msg = String()
+    msg.data = json.dumps(data)
+    for publisher in publishers:
+        publisher.publish(msg)
 
 
 def create_trackbars(win):
@@ -151,18 +162,12 @@ def compute_angle_error(light_center):
     return yaw_error, heave_error
 
 
-def atomic_write_json(path, data):
+def append_json_log(path, data):
     directory = os.path.dirname(os.path.abspath(path)) or "."
     os.makedirs(directory, exist_ok=True)
-    fd, temp_path = tempfile.mkstemp(prefix=".tmp_", suffix=".json", dir=directory)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, indent=2)
-            handle.write("\n")
-        os.replace(temp_path, path)
-    finally:
-        if os.path.exists(temp_path):
-            os.unlink(temp_path)
+    with open(path, "a", encoding="utf-8") as handle:
+        json.dump(data, handle, separators=(",", ":"))
+        handle.write("\n")
 
 
 def build_payload(light_center, image_shape, pose_detected=False, euler_deg=None, tvec=None):
@@ -216,11 +221,22 @@ def main():
         rospy.init_node("docking_light_strip_detector", anonymous=False)
 
     camera_index = int(get_param("camera_index", 1))
-    json_output_file = get_param("json_output_file", "/home/sodaoh258/pose_data.json")
+    json_output_file = get_param("json_output_file", "/home/sodaoh258/pose_data.jsonl")
+    write_json = bool(get_param("write_json", False))
+    publish_topics = bool(get_param("publish_topics", True))
+    blue_light_topic = get_param("blue_light_topic", "/docking/blue_light")
+    dock_pose_topic = get_param("dock_pose_topic", "/docking/dock_pose")
     show_windows = bool(get_param("show_debug_windows", False))
     thresh_param = int(get_param("threshold", INIT_THRESH))
     kernel_param = int(get_param("kernel_size", INIT_KERNEL_SIZE))
     epsilon_param = float(get_param("epsilon", INIT_EPSILON))
+
+    publishers = []
+    if publish_topics and rospy is not None and rospy.core.is_initialized():
+        publishers = [
+            rospy.Publisher(blue_light_topic, String, queue_size=10),
+            rospy.Publisher(dock_pose_topic, String, queue_size=10),
+        ]
 
     cap = cv2.VideoCapture(camera_index)
     if not cap.isOpened():
@@ -230,7 +246,7 @@ def main():
     if show_windows:
         create_trackbars("Light Strip Control")
 
-    print("灯带检测启动，JSON 输出: {}".format(json_output_file))
+    print("灯带检测启动，JSON 日志: {}".format(json_output_file if write_json else "disabled"))
 
     half_len = RECT_LENGTH / 2.0
     half_wid = RECT_WIDTH / 2.0
@@ -282,7 +298,9 @@ def main():
         payload = build_payload(
             light_center, frame.shape, pose_detected=pose_detected, euler_deg=euler_deg, tvec=tvec
         )
-        atomic_write_json(json_output_file, payload)
+        if write_json:
+            append_json_log(json_output_file, payload)
+        publish_json(publishers, payload)
 
         if show_windows:
             if light_center is None:

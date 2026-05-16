@@ -5,7 +5,6 @@ import json
 import math
 import os
 import sys
-import tempfile
 import time
 
 import cv2
@@ -14,8 +13,10 @@ import pupil_apriltags as apriltag
 
 try:
     import rospy
+    from std_msgs.msg import String
 except ImportError:
     rospy = None
+    String = None
 
 
 FX = 1115.5075
@@ -37,18 +38,21 @@ def should_shutdown():
     return rospy is not None and rospy.core.is_initialized() and rospy.is_shutdown()
 
 
-def atomic_write_json(path, data):
+def publish_json(publisher, data):
+    if publisher is None:
+        return
+
+    msg = String()
+    msg.data = json.dumps(data)
+    publisher.publish(msg)
+
+
+def append_json_log(path, data):
     directory = os.path.dirname(os.path.abspath(path)) or "."
     os.makedirs(directory, exist_ok=True)
-    fd, temp_path = tempfile.mkstemp(prefix=".tmp_", suffix=".json", dir=directory)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(data, handle, indent=2)
-            handle.write("\n")
-        os.replace(temp_path, path)
-    finally:
-        if os.path.exists(temp_path):
-            os.unlink(temp_path)
+    with open(path, "a", encoding="utf-8") as handle:
+        json.dump(data, handle, separators=(",", ":"))
+        handle.write("\n")
 
 
 def inverse_matrix(K_matrix):
@@ -134,11 +138,18 @@ def main():
         rospy.init_node("docking_apriltag_detector", anonymous=False)
 
     camera_index = int(get_param("camera_index", 0))
-    json_output_file = get_param("json_output_file", "/home/sodaoh258/apriltag_pose.json")
+    json_output_file = get_param("json_output_file", "/home/sodaoh258/apriltag_pose.jsonl")
+    write_json = bool(get_param("write_json", False))
+    publish_topics = bool(get_param("publish_topics", True))
+    apriltag_topic = get_param("apriltag_topic", "/docking/apriltag")
     tag_size = float(get_param("tag_size", TAG_SIZE))
     tag_family = get_param("tag_family", "tag36h11")
     show_windows = bool(get_param("show_debug_windows", False))
     undistort = bool(get_param("undistort", False))
+
+    apriltag_pub = None
+    if publish_topics and rospy is not None and rospy.core.is_initialized():
+        apriltag_pub = rospy.Publisher(apriltag_topic, String, queue_size=10)
 
     cap = cv2.VideoCapture(camera_index)
     if not cap.isOpened():
@@ -146,7 +157,7 @@ def main():
         return 1
 
     at_detector = apriltag.Detector(families=tag_family)
-    print("AprilTag 检测启动，JSON 输出: {}".format(json_output_file))
+    print("AprilTag 检测启动，JSON 日志: {}".format(json_output_file if write_json else "disabled"))
 
     while not should_shutdown():
         ret, frame = cap.read()
@@ -173,7 +184,10 @@ def main():
             R_cam_to_tag = R.T
             t_cam_in_tag = -R_cam_to_tag @ t
             euler_deg = np.degrees(R_to_euler(R))
-            atomic_write_json(json_output_file, build_payload(True, euler_deg, t_cam_in_tag))
+            payload = build_payload(True, euler_deg, t_cam_in_tag)
+            if write_json:
+                append_json_log(json_output_file, payload)
+            publish_json(apriltag_pub, payload)
 
             if show_windows:
                 for pt in corners.astype(int):
@@ -201,7 +215,10 @@ def main():
                     2,
                 )
         else:
-            atomic_write_json(json_output_file, build_payload(False))
+            payload = build_payload(False)
+            if write_json:
+                append_json_log(json_output_file, payload)
+            publish_json(apriltag_pub, payload)
             if show_windows:
                 cv2.putText(
                     draw,
