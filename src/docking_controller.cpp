@@ -169,6 +169,11 @@ void DockingController::loadParameters()
         "auto_start_inspection",
         config_.auto_start_inspection,
         config_.auto_start_inspection);
+    pnh_.param("auto_arm", config_.auto_arm, config_.auto_arm);
+    pnh_.param(
+        "wait_for_armed_before_docking",
+        config_.wait_for_armed_before_docking,
+        config_.wait_for_armed_before_docking);
     pnh_.param("command_rate_hz", config_.command_rate_hz, config_.command_rate_hz);
     pnh_.param(
         "observation_timeout_sec",
@@ -337,6 +342,9 @@ void DockingController::step()
     case State::START:
         handleStart();
         break;
+    case State::WAIT_FOR_ARMED:
+        handleWaitForArmed();
+        break;
     case State::SEARCH_BLUE_LIGHT:
         handleSearch();
         break;
@@ -385,6 +393,8 @@ std::string DockingController::stateToString(State state) const
     {
     case State::START:
         return "START";
+    case State::WAIT_FOR_ARMED:
+        return "WAIT_FOR_ARMED";
     case State::SEARCH_BLUE_LIGHT:
         return "SEARCH_BLUE_LIGHT";
     case State::APPROACH_BLUE_LIGHT:
@@ -420,13 +430,19 @@ void DockingController::handleStart()
 
     if (config_.autostart_module.empty())
     {
-        enterState(State::SEARCH_BLUE_LIGHT, "no autostart module configured");
+        enterState(
+            shouldWaitForArmedBeforeDocking() ? State::WAIT_FOR_ARMED
+                                             : State::SEARCH_BLUE_LIGHT,
+            "no autostart module configured");
         return;
     }
 
     if (module_started_)
     {
-        enterState(State::SEARCH_BLUE_LIGHT, "docking module already running");
+        enterState(
+            shouldWaitForArmedBeforeDocking() ? State::WAIT_FOR_ARMED
+                                             : State::SEARCH_BLUE_LIGHT,
+            "docking module already running");
         return;
     }
 
@@ -449,7 +465,10 @@ void DockingController::handleStart()
     {
         module_started_ =
             (response.state == "RUNNING" || response.message == "module already running");
-        enterState(State::SEARCH_BLUE_LIGHT, "docking module started");
+        enterState(
+            shouldWaitForArmedBeforeDocking() ? State::WAIT_FOR_ARMED
+                                             : State::SEARCH_BLUE_LIGHT,
+            "docking module started");
         return;
     }
 
@@ -458,6 +477,19 @@ void DockingController::handleStart()
         "Docking module [%s] failed to start: %s",
         config_.autostart_module.c_str(),
         response.message.c_str());
+}
+
+void DockingController::handleWaitForArmed()
+{
+    vehicle_->publishHold();
+
+    if (vehicle_->isArmed())
+    {
+        enterState(State::SEARCH_BLUE_LIGHT, "vehicle armed externally");
+        return;
+    }
+
+    ROS_INFO_THROTTLE(2.0, "Waiting for external arm before docking search");
 }
 
 void DockingController::handleSearch()
@@ -885,6 +917,12 @@ bool DockingController::readyForDockComplete() const
 {
     return data_.apriltag_detected &&
            data_.tag_distance <= config_.enter_dock.complete_distance_m;
+}
+
+bool DockingController::shouldWaitForArmedBeforeDocking() const
+{
+    return config_.wait_for_armed_before_docking && !config_.auto_arm &&
+           !vehicle_->isArmed();
 }
 
 bool DockingController::tryCallModuleCommand(

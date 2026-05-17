@@ -21,6 +21,7 @@ public:
     bool setMode(const std::string& mode_name) override;
     bool setCustomMode(uint32_t custom_mode_id);
     bool arm(bool value) override;
+    bool isArmed() const override;
 
     void publishCommand(const Command& command) override;
     void publishHold() override;

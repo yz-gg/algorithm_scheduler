@@ -45,6 +45,7 @@ public:
     virtual bool waitForServices(const ros::Duration& timeout) = 0;
     virtual bool setMode(const std::string& mode_name) = 0;
     virtual bool arm(bool value) = 0;
+    virtual bool isArmed() const = 0;
 
     virtual void publishCommand(const Command& command) = 0;
     virtual void publishHold() = 0;

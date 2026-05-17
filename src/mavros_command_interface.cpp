@@ -106,6 +106,11 @@ bool MavrosCommandInterface::arm(bool value)
     return false;
 }
 
+bool MavrosCommandInterface::isArmed() const
+{
+    return current_state_.armed;
+}
+
 void MavrosCommandInterface::publishCommand(const Command& command)
 {
     switch (command.type)

@@ -25,6 +25,7 @@ private:
     enum class State
     {
         START,
+        WAIT_FOR_ARMED,
         SEARCH_BLUE_LIGHT,
         APPROACH_BLUE_LIGHT,
         ALIGN_WITH_DOCK,
@@ -128,6 +129,8 @@ private:
         std::string apriltag_topic{""};
 
         bool auto_start_inspection{true};
+        bool auto_arm{true};
+        bool wait_for_armed_before_docking{false};
 
         double command_rate_hz{20.0};
         double observation_timeout_sec{0.5};
@@ -216,6 +219,7 @@ private:
     double stateElapsedSec() const;
 
     void handleStart();
+    void handleWaitForArmed();
     void handleSearch();
     void handleApproach();
     void handleAlign();
@@ -233,6 +237,7 @@ private:
     bool readyForTag() const;
     bool readyForEnterDock() const;
     bool readyForDockComplete() const;
+    bool shouldWaitForArmedBeforeDocking() const;
 
     bool tryCallModuleCommand(
         const std::string& module_name,
