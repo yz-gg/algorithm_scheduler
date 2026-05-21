@@ -1,8 +1,8 @@
 <launch>
   <arg name="use_external_process" default="false"/>
-  <arg name="algorithm_pkg" default="scheduler"/>
-  <arg name="algorithm_type" default="pipeline_detection_stub.py"/>
-  <arg name="algorithm_name" default="pipeline_vision_node"/>
+  <arg name="algorithm_pkg" default="pipe_detector"/>
+  <arg name="algorithm_type" default="pipe_detector_node.py"/>
+  <arg name="algorithm_name" default="pipe_detector_node"/>
   <arg name="observation_topic" default="/inspection/pipeline_observation"/>
   <arg name="python_executable" default="python3"/>
   <arg name="algorithm_script" default=""/>
@@ -10,6 +10,27 @@
   <arg name="algorithm_args" default=""/>
   <arg name="restart_on_exit" default="false"/>
   <arg name="restart_delay_sec" default="1.0"/>
+  <arg name="camera_index" default="0"/>
+  <arg name="camera_topic" default=""/>
+  <arg name="use_camera_topic" default="false"/>
+  <arg name="frame_width" default="640"/>
+  <arg name="frame_height" default="480"/>
+  <arg name="fps" default="15"/>
+  <arg name="pipe_centerline_topic" default="/pipe/centerline"/>
+  <arg name="debug_image_topic" default="/pipe/debug_image"/>
+  <arg name="publish_debug_image" default="true"/>
+  <arg name="publish_centerline" default="true"/>
+  <arg name="publish_compressed_debug_image" default="true"/>
+  <arg name="publish_scheduler_observation" default="true"/>
+  <arg name="use_left_half" default="true"/>
+  <arg name="rknn_model_path" default="/home/orangepi/pipe_project/yolomodel/best_rknn_model640/best-rk3588.rknn"/>
+  <arg name="rknn_backend" default="full"/>
+  <arg name="rknn_target" default="rk3588"/>
+  <arg name="threshold_low" default="10"/>
+  <arg name="threshold_high" default="255"/>
+  <arg name="threshold_kernel" default="5"/>
+  <arg name="yolo_kernel" default="15"/>
+  <arg name="expand_radius" default="7"/>
 
   <node
     unless="$(arg use_external_process)"
@@ -18,6 +39,28 @@
     name="$(arg algorithm_name)"
     output="screen">
     <param name="observation_topic" value="$(arg observation_topic)"/>
+    <param name="scheduler_observation_topic" value="$(arg observation_topic)"/>
+    <param name="camera_index" value="$(arg camera_index)"/>
+    <param name="camera_topic" value="$(arg camera_topic)"/>
+    <param name="use_camera_topic" value="$(arg use_camera_topic)"/>
+    <param name="frame_width" value="$(arg frame_width)"/>
+    <param name="frame_height" value="$(arg frame_height)"/>
+    <param name="fps" value="$(arg fps)"/>
+    <param name="pipe_centerline_topic" value="$(arg pipe_centerline_topic)"/>
+    <param name="debug_image_topic" value="$(arg debug_image_topic)"/>
+    <param name="publish_debug_image" value="$(arg publish_debug_image)"/>
+    <param name="publish_centerline" value="$(arg publish_centerline)"/>
+    <param name="publish_compressed_debug_image" value="$(arg publish_compressed_debug_image)"/>
+    <param name="publish_scheduler_observation" value="$(arg publish_scheduler_observation)"/>
+    <param name="use_left_half" value="$(arg use_left_half)"/>
+    <param name="rknn_model_path" value="$(arg rknn_model_path)"/>
+    <param name="rknn_backend" value="$(arg rknn_backend)"/>
+    <param name="rknn_target" value="$(arg rknn_target)"/>
+    <param name="threshold_low" value="$(arg threshold_low)"/>
+    <param name="threshold_high" value="$(arg threshold_high)"/>
+    <param name="threshold_kernel" value="$(arg threshold_kernel)"/>
+    <param name="yolo_kernel" value="$(arg yolo_kernel)"/>
+    <param name="expand_radius" value="$(arg expand_radius)"/>
   </node>
 
   <node

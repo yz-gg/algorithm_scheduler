@@ -2,14 +2,32 @@ modules:
   pipeline_inspection:
     package: scheduler
     launch: pipeline_inspection.launch
-    description: "Pipeline inspection perception module wrapper"
+    description: "Pipe detector ROS node wrapper"
     arguments:
-      use_external_process: true
-      python_executable: /home/orangepi/anaconda3/envs/gs_new/bin/python
-      algorithm_script: /home/orangepi/PycharmProjects/PythonProject/pipe/xcpjeson.py
-      algorithm_working_directory: /home/orangepi/PycharmProjects/PythonProject/pipe
-      restart_on_exit: true
-      restart_delay_sec: 1.0
+      use_external_process: false
+      algorithm_pkg: pipe_detector
+      algorithm_type: pipe_detector_node.py
+      algorithm_name: pipe_detector_node
+      observation_topic: /inspection/pipeline_observation
+      pipe_centerline_topic: /pipe/centerline
+      debug_image_topic: /pipe/debug_image
+      publish_centerline: true
+      publish_debug_image: true
+      publish_compressed_debug_image: true
+      publish_scheduler_observation: true
+      camera_index: 0
+      frame_width: 640
+      frame_height: 480
+      fps: 15
+      use_left_half: true
+      rknn_model_path: /home/orangepi/pipe_project/yolomodel/best_rknn_model640/best-rk3588.rknn
+      rknn_backend: full
+      rknn_target: rk3588
+      threshold_low: 10
+      threshold_high: 255
+      threshold_kernel: 5
+      yolo_kernel: 15
+      expand_radius: 7
   docking:
     package: scheduler
     launch: docking_algorithm.launch

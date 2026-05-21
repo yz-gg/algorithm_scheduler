@@ -12,7 +12,7 @@ wait_for_fcu_connection: true
 set_flight_mode_on_start: true
 
 # Whether scheduler_node should send an arm command on startup.
-auto_arm: true
+auto_arm: false
 
 # Maximum time spent waiting for MAVROS services to appear.
 mavros_service_wait_sec: 5.0
