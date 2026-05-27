@@ -21,16 +21,34 @@
   <arg name="publish_debug_image" default="true"/>
   <arg name="publish_centerline" default="true"/>
   <arg name="publish_compressed_debug_image" default="true"/>
+  <arg name="compressed_debug_image_left_half" default="true"/>
   <arg name="publish_scheduler_observation" default="true"/>
   <arg name="use_left_half" default="true"/>
+  <arg name="match_original_pipeline" default="true"/>
+  <arg name="reuse_last_on_skipped_frames" default="true"/>
+  <arg name="enable_runtime_param_topics" default="true"/>
+  <arg name="runtime_param_topic_prefix" default="~set"/>
   <arg name="rknn_model_path" default="/home/orangepi/pipe_project/yolomodel/best_rknn_model640/best-rk3588.rknn"/>
   <arg name="rknn_backend" default="full"/>
   <arg name="rknn_target" default="rk3588"/>
+  <arg name="rknn_data_format" default="nchw"/>
+  <arg name="ld_preload" default="/usr/lib/aarch64-linux-gnu/libgomp.so.1"/>
   <arg name="threshold_low" default="10"/>
   <arg name="threshold_high" default="255"/>
   <arg name="threshold_kernel" default="5"/>
   <arg name="yolo_kernel" default="15"/>
   <arg name="expand_radius" default="7"/>
+  <arg name="thresh_low_min" default="10"/>
+  <arg name="thresh_low_max" default="20"/>
+  <arg name="smooth_target" default="0.95"/>
+  <arg name="auto_expand_enabled" default="true"/>
+  <arg name="expand_radius_min" default="5"/>
+  <arg name="expand_radius_max" default="9"/>
+  <arg name="smooth_window" default="5"/>
+  <arg name="max_point_deviation" default="50"/>
+  <arg name="infer_interval" default="1"/>
+  <arg name="min_infer_interval" default="1"/>
+  <arg name="max_infer_interval" default="30"/>
 
   <node
     unless="$(arg use_external_process)"
@@ -38,6 +56,7 @@
     type="$(arg algorithm_type)"
     name="$(arg algorithm_name)"
     output="screen">
+    <env name="LD_PRELOAD" value="$(arg ld_preload)"/>
     <param name="observation_topic" value="$(arg observation_topic)"/>
     <param name="scheduler_observation_topic" value="$(arg observation_topic)"/>
     <param name="camera_index" value="$(arg camera_index)"/>
@@ -51,16 +70,33 @@
     <param name="publish_debug_image" value="$(arg publish_debug_image)"/>
     <param name="publish_centerline" value="$(arg publish_centerline)"/>
     <param name="publish_compressed_debug_image" value="$(arg publish_compressed_debug_image)"/>
+    <param name="compressed_debug_image_left_half" value="$(arg compressed_debug_image_left_half)"/>
     <param name="publish_scheduler_observation" value="$(arg publish_scheduler_observation)"/>
     <param name="use_left_half" value="$(arg use_left_half)"/>
+    <param name="match_original_pipeline" value="$(arg match_original_pipeline)"/>
+    <param name="reuse_last_on_skipped_frames" value="$(arg reuse_last_on_skipped_frames)"/>
+    <param name="enable_runtime_param_topics" value="$(arg enable_runtime_param_topics)"/>
+    <param name="runtime_param_topic_prefix" value="$(arg runtime_param_topic_prefix)"/>
     <param name="rknn_model_path" value="$(arg rknn_model_path)"/>
     <param name="rknn_backend" value="$(arg rknn_backend)"/>
     <param name="rknn_target" value="$(arg rknn_target)"/>
+    <param name="rknn_data_format" value="$(arg rknn_data_format)"/>
     <param name="threshold_low" value="$(arg threshold_low)"/>
     <param name="threshold_high" value="$(arg threshold_high)"/>
     <param name="threshold_kernel" value="$(arg threshold_kernel)"/>
     <param name="yolo_kernel" value="$(arg yolo_kernel)"/>
     <param name="expand_radius" value="$(arg expand_radius)"/>
+    <param name="thresh_low_min" value="$(arg thresh_low_min)"/>
+    <param name="thresh_low_max" value="$(arg thresh_low_max)"/>
+    <param name="smooth_target" value="$(arg smooth_target)"/>
+    <param name="auto_expand_enabled" value="$(arg auto_expand_enabled)"/>
+    <param name="expand_radius_min" value="$(arg expand_radius_min)"/>
+    <param name="expand_radius_max" value="$(arg expand_radius_max)"/>
+    <param name="smooth_window" value="$(arg smooth_window)"/>
+    <param name="max_point_deviation" value="$(arg max_point_deviation)"/>
+    <param name="infer_interval" value="$(arg infer_interval)"/>
+    <param name="min_infer_interval" value="$(arg min_infer_interval)"/>
+    <param name="max_infer_interval" value="$(arg max_infer_interval)"/>
   </node>
 
   <node
@@ -69,6 +105,7 @@
     type="external_pipeline_algorithm_bridge.py"
     name="$(arg algorithm_name)"
     output="screen">
+    <env name="LD_PRELOAD" value="$(arg ld_preload)"/>
     <param name="observation_topic" value="$(arg observation_topic)"/>
     <param name="python_executable" value="$(arg python_executable)"/>
     <param name="algorithm_script" value="$(arg algorithm_script)"/>

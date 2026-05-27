@@ -17,6 +17,12 @@ except ImportError:
     rospy = None
     String = None
 
+try:
+    from sensor_msgs.msg import CompressedImage, Image
+except ImportError:
+    CompressedImage = None
+    Image = None
+
 
 INIT_THRESH = 240
 INIT_KERNEL_SIZE = 7
@@ -26,11 +32,11 @@ RECT_LENGTH = 1.18
 RECT_WIDTH = 0.85
 TAG_SIZE = 0.055
 
-DEFAULT_FX = 1115.5075
-DEFAULT_FY = 1116.0352
-DEFAULT_CX = 692.3729
-DEFAULT_CY = 503.0312
-DEFAULT_DIST_COEFFS = [0.428537, 0.157768, 0.0, 0.0, 0.0]
+DEFAULT_FX = 838.164
+DEFAULT_FY = 838.263
+DEFAULT_CX = 692.584
+DEFAULT_CY = 502.072
+DEFAULT_DIST_COEFFS = [0.0278657, -0.0251761, 0.0, 0.0, 0.0]
 
 
 def nothing(_):
@@ -62,6 +68,47 @@ def publish_json(publisher, data):
     msg = String()
     msg.data = json.dumps(data)
     publisher.publish(msg)
+
+
+def select_processing_frame(frame, use_left_half):
+    if not use_left_half:
+        return frame
+    _, width = frame.shape[:2]
+    if width < 2:
+        return frame
+    return frame[:, : width // 2]
+
+
+def publish_processed_image(image_pub, compressed_pub, frame, frame_id="docking_vision"):
+    if frame is None:
+        return
+
+    header = None
+    if image_pub is not None:
+        image_msg = Image()
+        image_msg.header.stamp = rospy.Time.now()
+        image_msg.header.frame_id = frame_id
+        image_msg.height = frame.shape[0]
+        image_msg.width = frame.shape[1]
+        image_msg.encoding = "bgr8"
+        image_msg.is_bigendian = False
+        image_msg.step = frame.shape[1] * frame.shape[2]
+        image_msg.data = np.ascontiguousarray(frame).tobytes()
+        image_pub.publish(image_msg)
+        header = image_msg.header
+
+    if compressed_pub is not None:
+        ok, encoded = cv2.imencode(".jpg", frame)
+        if ok:
+            compressed_msg = CompressedImage()
+            if header is None:
+                compressed_msg.header.stamp = rospy.Time.now()
+                compressed_msg.header.frame_id = frame_id
+            else:
+                compressed_msg.header = header
+            compressed_msg.format = "jpeg"
+            compressed_msg.data = encoded.tobytes()
+            compressed_pub.publish(compressed_msg)
 
 
 def create_trackbars(win):
@@ -345,6 +392,11 @@ def main():
     write_json = bool(get_param("write_json", False))
     publish_topics = bool(get_param("publish_topics", True))
     show_windows = bool(get_param("show_debug_windows", False))
+    use_left_half = bool(get_param("use_left_half", False))
+    publish_processed_stream = bool(get_param("publish_processed_stream", True))
+    publish_compressed_stream = bool(get_param("publish_compressed_stream", True))
+    processed_image_topic = get_param("processed_image_topic", "/docking/vision/image")
+    processed_image_frame_id = get_param("processed_image_frame_id", "docking_vision")
 
     light_json_file = get_param("light_json_file", "/home/sodaoh258/pose_data.jsonl")
     apriltag_json_file = get_param("apriltag_json_file", "/home/sodaoh258/apriltag_pose.jsonl")
@@ -363,10 +415,23 @@ def main():
     light_pub = None
     dock_pub = None
     tag_pub = None
+    image_pub = None
+    compressed_pub = None
     if publish_topics and rospy is not None and rospy.core.is_initialized():
         light_pub = rospy.Publisher(blue_light_topic, String, queue_size=10)
         dock_pub = rospy.Publisher(dock_pose_topic, String, queue_size=10)
         tag_pub = rospy.Publisher(apriltag_topic, String, queue_size=10)
+        if publish_processed_stream:
+            if Image is None or CompressedImage is None:
+                rospy.logwarn("sensor_msgs is unavailable; disabled processed image stream")
+            else:
+                image_pub = rospy.Publisher(processed_image_topic, Image, queue_size=1)
+                if publish_compressed_stream:
+                    compressed_pub = rospy.Publisher(
+                        processed_image_topic + "/compressed",
+                        CompressedImage,
+                        queue_size=1,
+                    )
 
     detector = None
     if enable_apriltag:
@@ -392,17 +457,24 @@ def main():
         cap.release()
         return 1
 
-    camera_matrix = get_camera_matrix(first_frame.shape[1], first_frame.shape[0])
+    first_processing_frame = select_processing_frame(first_frame, use_left_half)
+    camera_matrix = get_camera_matrix(
+        first_processing_frame.shape[1], first_processing_frame.shape[0]
+    )
     if show_windows and enable_light:
         create_trackbars("Light Strip Control")
 
     print(
-        "回坞视觉启动: camera={}, frame={}x{}, light={}, apriltag={}, logs={}".format(
+        "回坞视觉启动: camera={}, frame={}x{}, processing={}x{}, left_half={}, light={}, apriltag={}, stream={}, logs={}".format(
             camera_index,
             first_frame.shape[1],
             first_frame.shape[0],
+            first_processing_frame.shape[1],
+            first_processing_frame.shape[0],
+            use_left_half,
             enable_light,
             enable_apriltag,
+            processed_image_topic if image_pub is not None else "disabled",
             "enabled" if write_json else "disabled",
         )
     )
@@ -429,7 +501,8 @@ def main():
             frame = pending_frame
             pending_frame = None
 
-        display = frame.copy()
+        processing_frame = select_processing_frame(frame, use_left_half)
+        display = processing_frame.copy()
 
         if enable_light:
             if show_windows:
@@ -447,7 +520,7 @@ def main():
             kernel_size = max(1, kernel_size)
 
             corners, light_center, mask_raw, mask_proc, light_result = process_light_frame(
-                frame, thresh, kernel_size, epsilon
+                processing_frame, thresh, kernel_size, epsilon
             )
 
             pose_detected = False
@@ -468,7 +541,7 @@ def main():
 
             light_payload = build_light_payload(
                 light_center,
-                frame.shape,
+                processing_frame.shape,
                 camera_matrix,
                 pose_detected=pose_detected,
                 euler_deg=euler_deg,
@@ -482,7 +555,7 @@ def main():
 
         if enable_apriltag and detector is not None:
             tag_payload, tag_display = detect_apriltag(
-                frame,
+                processing_frame,
                 detector,
                 camera_matrix,
                 tag_size,
@@ -494,6 +567,8 @@ def main():
                 append_json_log(apriltag_json_file, tag_payload)
             if not enable_light:
                 display = tag_display
+
+        publish_processed_image(image_pub, compressed_pub, display, processed_image_frame_id)
 
         if show_windows:
             cv2.imshow("Docking Vision", display)

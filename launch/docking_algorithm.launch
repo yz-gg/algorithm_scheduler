@@ -9,13 +9,18 @@
   <arg name="camera_index" default="0"/>
   <arg name="frame_width" default="0"/>
   <arg name="frame_height" default="0"/>
-  <arg name="fx" default="1115.5075"/>
-  <arg name="fy" default="1116.0352"/>
-  <arg name="cx" default="692.3729"/>
-  <arg name="cy" default="503.0312"/>
+  <arg name="fx" default="838.164"/>
+  <arg name="fy" default="838.263"/>
+  <arg name="cx" default="692.584"/>
+  <arg name="cy" default="502.072"/>
   <arg name="threshold" default="240"/>
   <arg name="kernel_size" default="7"/>
   <arg name="epsilon" default="0.02"/>
+  <arg name="use_left_half" default="false"/>
+  <arg name="processed_image_topic" default="/docking/vision/image"/>
+  <arg name="processed_image_frame_id" default="docking_vision"/>
+  <arg name="publish_processed_stream" default="true"/>
+  <arg name="publish_compressed_stream" default="true"/>
   <arg name="show_debug_windows" default="false"/>
   <arg name="publish_topics" default="true"/>
   <arg name="write_json" default="false"/>
@@ -35,6 +40,11 @@
     <param name="threshold" value="$(arg threshold)"/>
     <param name="kernel_size" value="$(arg kernel_size)"/>
     <param name="epsilon" value="$(arg epsilon)"/>
+    <param name="use_left_half" value="$(arg use_left_half)"/>
+    <param name="processed_image_topic" value="$(arg processed_image_topic)"/>
+    <param name="processed_image_frame_id" value="$(arg processed_image_frame_id)"/>
+    <param name="publish_processed_stream" value="$(arg publish_processed_stream)"/>
+    <param name="publish_compressed_stream" value="$(arg publish_compressed_stream)"/>
     <param name="enable_light" value="$(arg start_light_detector)"/>
     <param name="enable_apriltag" value="$(arg start_apriltag_detector)"/>
     <param name="light_json_file" value="$(arg light_json_file)"/>

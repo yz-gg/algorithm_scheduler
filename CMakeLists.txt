@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   geometry_msgs
   mavros_msgs
+  sensor_msgs
 )
 
 add_message_files(
@@ -31,7 +32,7 @@ generate_messages(
 
 catkin_package(
   INCLUDE_DIRS include
-  CATKIN_DEPENDS message_runtime roscpp rospy std_msgs geometry_msgs mavros_msgs
+  CATKIN_DEPENDS message_runtime roscpp rospy std_msgs geometry_msgs mavros_msgs sensor_msgs
 )
 
 include_directories(

@@ -25,12 +25,12 @@ INIT_EPSILON = 0.02
 RECT_LENGTH = 1.18
 RECT_WIDTH = 0.85
 
-FX = 1115.5075
-FY = 1116.0352
-CX = 692.3729
-CY = 503.0312
+FX = 838.164
+FY = 838.263
+CX = 692.584
+CY = 502.072
 K = np.array([[FX, 0, CX], [0, FY, CY], [0, 0, 1]], dtype=np.float64)
-DIST_COEFFS = np.array([0.428537, 0.157768, 0, 0, 0], dtype=np.float64)
+DIST_COEFFS = np.array([0.0278657, -0.0251761, 0, 0, 0], dtype=np.float64)
 
 
 def nothing(_):

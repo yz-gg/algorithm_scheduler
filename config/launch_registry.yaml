@@ -14,20 +14,38 @@ modules:
       publish_centerline: true
       publish_debug_image: true
       publish_compressed_debug_image: true
+      compressed_debug_image_left_half: true
       publish_scheduler_observation: true
       camera_index: 0
       frame_width: 640
       frame_height: 480
       fps: 15
       use_left_half: true
+      match_original_pipeline: true
+      reuse_last_on_skipped_frames: true
+      enable_runtime_param_topics: true
+      runtime_param_topic_prefix: "~set"
       rknn_model_path: /home/orangepi/pipe_project/yolomodel/best_rknn_model640/best-rk3588.rknn
       rknn_backend: full
       rknn_target: rk3588
+      rknn_data_format: nchw
+      ld_preload: /usr/lib/aarch64-linux-gnu/libgomp.so.1
       threshold_low: 10
       threshold_high: 255
       threshold_kernel: 5
       yolo_kernel: 15
       expand_radius: 7
+      thresh_low_min: 10
+      thresh_low_max: 20
+      smooth_target: 0.95
+      auto_expand_enabled: true
+      expand_radius_min: 5
+      expand_radius_max: 9
+      smooth_window: 5
+      max_point_deviation: 50
+      infer_interval: 1
+      min_infer_interval: 1
+      max_infer_interval: 30
   docking:
     package: scheduler
     launch: docking_algorithm.launch
@@ -43,13 +61,18 @@ modules:
       camera_index: 0
       frame_width: 0
       frame_height: 0
-      fx: 1115.5075
-      fy: 1116.0352
-      cx: 692.3729
-      cy: 503.0312
+      fx: 838.164
+      fy: 838.263
+      cx: 692.584
+      cy: 502.072
       threshold: 240
       kernel_size: 7
       epsilon: 0.02
+      use_left_half: false
+      processed_image_topic: /docking/vision/image
+      processed_image_frame_id: docking_vision
+      publish_processed_stream: true
+      publish_compressed_stream: true
       publish_topics: true
       write_json: false
       show_debug_windows: false
