@@ -61,6 +61,7 @@ catkin_install_python(PROGRAMS
   scripts/docking_light_strip_detector.py
   scripts/docking_apriltag_detector.py
   scripts/docking_data_logger.py
+  scripts/pipeline_data_logger.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
