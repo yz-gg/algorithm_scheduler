@@ -1,0 +1,28 @@
+<launch>
+  <arg name="enabled" default="true"/>
+  <arg name="log_directory" default="$(env HOME)/scheduler_logs/docking"/>
+  <arg name="log_prefix" default="docking"/>
+  <arg name="flush_every_n_lines" default="20"/>
+  <arg name="parse_json_payloads" default="true"/>
+
+  <arg name="blue_light_topic" default="/docking/blue_light"/>
+  <arg name="dock_pose_topic" default="/docking/dock_pose"/>
+  <arg name="apriltag_topic" default="/docking/apriltag"/>
+  <arg name="cmd_vel_topic" default="/mavros/setpoint_velocity/cmd_vel"/>
+
+  <node
+    pkg="scheduler"
+    type="docking_data_logger.py"
+    name="docking_data_logger"
+    output="screen">
+    <param name="enabled" value="$(arg enabled)"/>
+    <param name="log_directory" value="$(arg log_directory)"/>
+    <param name="log_prefix" value="$(arg log_prefix)"/>
+    <param name="flush_every_n_lines" value="$(arg flush_every_n_lines)"/>
+    <param name="parse_json_payloads" value="$(arg parse_json_payloads)"/>
+    <param name="blue_light_topic" value="$(arg blue_light_topic)"/>
+    <param name="dock_pose_topic" value="$(arg dock_pose_topic)"/>
+    <param name="apriltag_topic" value="$(arg apriltag_topic)"/>
+    <param name="cmd_vel_topic" value="$(arg cmd_vel_topic)"/>
+  </node>
+</launch>

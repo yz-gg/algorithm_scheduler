@@ -1,5 +1,5 @@
 <launch>
-  <arg name="fcu_url" default="serial:///dev/ttyACM0:57600?ids=255,240"/>
+  <arg name="fcu_url" default="serial:///dev/ttyS6:115200?ids=255,240"/>
 
   <include file="$(find mavros)/launch/apm.launch">
     <arg name="fcu_url" value="$(arg fcu_url)"/>
