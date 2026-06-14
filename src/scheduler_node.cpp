@@ -36,7 +36,7 @@ int main(int argc, char** argv)
         mavros_service_wait_sec,
         mavros_service_wait_sec);
 
-    MavrosCommandInterface mavros(nh);
+    MavrosCommandInterface mavros(nh, pnh);
 
     ROS_INFO_STREAM(
         "Scheduler node started with mission type [" << mission_type << "]");

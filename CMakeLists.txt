@@ -9,6 +9,7 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   geometry_msgs
+  sensor_msgs
   mavros_msgs
 )
 
@@ -31,7 +32,7 @@ generate_messages(
 
 catkin_package(
   INCLUDE_DIRS include
-  CATKIN_DEPENDS message_runtime roscpp rospy std_msgs geometry_msgs mavros_msgs
+  CATKIN_DEPENDS message_runtime roscpp rospy std_msgs geometry_msgs sensor_msgs mavros_msgs
 )
 
 include_directories(
@@ -41,6 +42,7 @@ include_directories(
 
 add_executable(scheduler_node
   src/scheduler_node.cpp
+  src/rc_command_mapper.cpp
   src/mavros_command_interface.cpp
   src/pipeline_inspection_controller.cpp
   src/docking_controller.cpp
@@ -52,6 +54,16 @@ add_dependencies(scheduler_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXP
 target_link_libraries(scheduler_node
   ${catkin_LIBRARIES}
 )
+
+if(CATKIN_ENABLE_TESTING)
+  catkin_add_gtest(test_rc_command_mapper
+    test/test_rc_command_mapper.cpp
+    src/rc_command_mapper.cpp
+  )
+  if(TARGET test_rc_command_mapper)
+    target_link_libraries(test_rc_command_mapper ${catkin_LIBRARIES})
+  endif()
+endif()
 
 catkin_install_python(PROGRAMS
   scripts/scheduler_launch.py

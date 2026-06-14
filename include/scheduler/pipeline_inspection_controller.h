@@ -30,15 +30,23 @@ private:
         SEARCH_PRIMARY_LINE,
         ALIGN_PRIMARY_LINE,
         TRACK_PRIMARY_LINE,
+        APPROACH_CORNER,
         TURNING_TO_SECONDARY_LINE,
         ALIGN_SECONDARY_LINE,
         TRACK_SECONDARY_LINE,
+        RECOVER_LINE,
         FINISHING,
         COMPLETED,
         FAULT,
     };
 
     enum class TargetLine
+    {
+        PRIMARY,
+        SECONDARY,
+    };
+
+    enum class RecoveryTarget
     {
         PRIMARY,
         SECONDARY,
@@ -82,6 +90,22 @@ private:
         ros::Time stamp;
     };
 
+    struct ControlErrors
+    {
+        double lateral{0.0};
+        double angle{0.0};
+        double lateral_rate{0.0};
+    };
+
+    struct MotionReference
+    {
+        double surge{0.0};
+        double sway{0.0};
+        double heave{0.0};
+        double yaw_rate{0.0};
+        RcSpeedGear gear{RcSpeedGear::SLOW};
+    };
+
     struct Config
     {
         std::string autostart_module{"pipeline_inspection"};
@@ -96,6 +120,8 @@ private:
         double turn_trigger_hold_sec{0.3};
         double turn_commit_sec{0.5};
         double turn_timeout_sec{4.0};
+        double recovery_timeout_sec{3.0};
+        double search_reverse_interval_sec{3.0};
         double inspection_duration_sec{0.0};
         double min_observation_confidence{0.6};
 
@@ -106,20 +132,42 @@ private:
         double lateral_tolerance_norm{0.08};
         double angle_tolerance_rad{0.10};
 
-        double vy_from_x_gain{0.18};
+        double sway_from_lateral_gain{0.8};
+        double sway_from_lateral_rate_gain{0.08};
         double yaw_rate_from_angle_gain{0.35};
-        double vx_from_range_gain{0.15};
+        double yaw_rate_from_lateral_gain{0.10};
 
-        double align_forward_speed{0.03};
-        double track_forward_speed{0.12};
-        double turn_forward_speed{0.04};
+        double align_surge_command{0.25};
+        double track_surge_command{0.65};
+        double turn_surge_command{0.25};
+        double search_yaw_command{0.35};
+        double recovery_yaw_command{0.30};
         double turn_yaw_rate{0.18};
 
         double max_forward_speed{0.20};
         double max_lateral_speed{0.15};
         double max_yaw_rate{0.25};
 
-        double target_range_m{-1.0};
+        double error_filter_tau_sec{0.15};
+        double error_rate_filter_tau_sec{0.25};
+        double minimum_surge_scale{0.15};
+        double surge_lateral_error_weight{2.5};
+        double surge_angle_error_weight{2.0};
+        double hard_stop_lateral_error{0.65};
+        double hard_stop_angle_error{0.60};
+
+        double medium_gear_lateral_error{0.18};
+        double medium_gear_angle_error{0.20};
+        double fast_gear_lateral_error{0.06};
+        double fast_gear_angle_error{0.08};
+        double fast_gear_min_confidence{0.80};
+
+        double yaw_rate_feedback_kp{0.45};
+        double linear_velocity_feedback_kp{0.15};
+        double min_linear_velocity_quality{0.60};
+        double feedback_timeout_sec{0.30};
+
+        double corner_approach_bottom_distance_px{240.0};
         double turn_trigger_bottom_distance_px{120.0};
         double turn_direction_sign_from_image_x{1.0};
 
@@ -143,8 +191,16 @@ private:
     bool module_started_{false};
     bool turn_direction_ready_{false};
     double turn_direction_sign_{0.0};
+    RecoveryTarget recovery_target_{RecoveryTarget::PRIMARY};
+    double recovery_scan_sign_{1.0};
+
+    bool error_filter_initialized_{false};
+    TargetLine error_filter_target_{TargetLine::PRIMARY};
+    ControlErrors filtered_errors_;
 
     ros::Time last_module_request_time_;
+    ros::Time state_entered_at_;
+    ros::Time last_error_update_time_;
     ros::Time line_stable_since_;
     ros::Time align_stable_since_;
     ros::Time turn_ready_since_;
@@ -163,10 +219,14 @@ private:
     void handleSearchPrimaryLine();
     void handleAlignPrimaryLine();
     void handleTrackPrimaryLine();
+    void handleApproachCorner();
     void handleTurningToSecondaryLine();
     void handleAlignSecondaryLine();
     void handleTrackSecondaryLine();
+    void handleRecoverLine();
     void handleFinishing();
+
+    void beginRecovery(RecoveryTarget target, const std::string& reason);
 
     bool hasFreshObservation() const;
     bool hasUsablePrimaryLine() const;
@@ -195,6 +255,15 @@ private:
 
     ControlCommand buildTrackingCommand(
         TargetLine target,
+        bool tracking_mode);
+    ControlCommand buildTurningCommand();
+    ControlCommand buildSearchCommand() const;
+    ControlCommand buildRecoveryCommand() const;
+    ControlCommand buildRcCommand(const MotionReference& reference) const;
+
+    bool updateControlErrors(TargetLine target, ControlErrors* errors);
+    RcSpeedGear selectTrackingGear(
+        const ControlErrors& errors,
         bool tracking_mode) const;
-    ControlCommand buildTurningCommand() const;
+    bool getFreshFeedback(VehicleCommandInterface::Feedback* feedback) const;
 };

@@ -58,7 +58,7 @@ void PipelineInspectionController::run()
         rate.sleep();
     }
 
-    vehicle_->publishHold();
+    vehicle_->publishCommand(VehicleCommandInterface::RcRelease());
 }
 
 std::string PipelineInspectionController::missionType() const
@@ -100,6 +100,14 @@ void PipelineInspectionController::loadParameters()
         config_.turn_commit_sec);
     pnh_.param("turn_timeout_sec", config_.turn_timeout_sec, config_.turn_timeout_sec);
     pnh_.param(
+        "recovery_timeout_sec",
+        config_.recovery_timeout_sec,
+        config_.recovery_timeout_sec);
+    pnh_.param(
+        "search_reverse_interval_sec",
+        config_.search_reverse_interval_sec,
+        config_.search_reverse_interval_sec);
+    pnh_.param(
         "inspection_duration_sec",
         config_.inspection_duration_sec,
         config_.inspection_duration_sec);
@@ -130,28 +138,43 @@ void PipelineInspectionController::loadParameters()
         config_.angle_tolerance_rad,
         config_.angle_tolerance_rad);
 
-    pnh_.param("vy_from_x_gain", config_.vy_from_x_gain, config_.vy_from_x_gain);
+    pnh_.param(
+        "sway_from_lateral_gain",
+        config_.sway_from_lateral_gain,
+        config_.sway_from_lateral_gain);
+    pnh_.param(
+        "sway_from_lateral_rate_gain",
+        config_.sway_from_lateral_rate_gain,
+        config_.sway_from_lateral_rate_gain);
     pnh_.param(
         "yaw_rate_from_angle_gain",
         config_.yaw_rate_from_angle_gain,
         config_.yaw_rate_from_angle_gain);
     pnh_.param(
-        "vx_from_range_gain",
-        config_.vx_from_range_gain,
-        config_.vx_from_range_gain);
+        "yaw_rate_from_lateral_gain",
+        config_.yaw_rate_from_lateral_gain,
+        config_.yaw_rate_from_lateral_gain);
 
     pnh_.param(
-        "align_forward_speed",
-        config_.align_forward_speed,
-        config_.align_forward_speed);
+        "align_surge_command",
+        config_.align_surge_command,
+        config_.align_surge_command);
     pnh_.param(
-        "track_forward_speed",
-        config_.track_forward_speed,
-        config_.track_forward_speed);
+        "track_surge_command",
+        config_.track_surge_command,
+        config_.track_surge_command);
     pnh_.param(
-        "turn_forward_speed",
-        config_.turn_forward_speed,
-        config_.turn_forward_speed);
+        "turn_surge_command",
+        config_.turn_surge_command,
+        config_.turn_surge_command);
+    pnh_.param(
+        "search_yaw_command",
+        config_.search_yaw_command,
+        config_.search_yaw_command);
+    pnh_.param(
+        "recovery_yaw_command",
+        config_.recovery_yaw_command,
+        config_.recovery_yaw_command);
     pnh_.param("turn_yaw_rate", config_.turn_yaw_rate, config_.turn_yaw_rate);
 
     pnh_.param(
@@ -160,7 +183,77 @@ void PipelineInspectionController::loadParameters()
         "max_lateral_speed", config_.max_lateral_speed, config_.max_lateral_speed);
     pnh_.param("max_yaw_rate", config_.max_yaw_rate, config_.max_yaw_rate);
 
-    pnh_.param("target_range_m", config_.target_range_m, config_.target_range_m);
+    pnh_.param(
+        "error_filter_tau_sec",
+        config_.error_filter_tau_sec,
+        config_.error_filter_tau_sec);
+    pnh_.param(
+        "error_rate_filter_tau_sec",
+        config_.error_rate_filter_tau_sec,
+        config_.error_rate_filter_tau_sec);
+    pnh_.param(
+        "minimum_surge_scale",
+        config_.minimum_surge_scale,
+        config_.minimum_surge_scale);
+    pnh_.param(
+        "surge_lateral_error_weight",
+        config_.surge_lateral_error_weight,
+        config_.surge_lateral_error_weight);
+    pnh_.param(
+        "surge_angle_error_weight",
+        config_.surge_angle_error_weight,
+        config_.surge_angle_error_weight);
+    pnh_.param(
+        "hard_stop_lateral_error",
+        config_.hard_stop_lateral_error,
+        config_.hard_stop_lateral_error);
+    pnh_.param(
+        "hard_stop_angle_error",
+        config_.hard_stop_angle_error,
+        config_.hard_stop_angle_error);
+
+    pnh_.param(
+        "medium_gear_lateral_error",
+        config_.medium_gear_lateral_error,
+        config_.medium_gear_lateral_error);
+    pnh_.param(
+        "medium_gear_angle_error",
+        config_.medium_gear_angle_error,
+        config_.medium_gear_angle_error);
+    pnh_.param(
+        "fast_gear_lateral_error",
+        config_.fast_gear_lateral_error,
+        config_.fast_gear_lateral_error);
+    pnh_.param(
+        "fast_gear_angle_error",
+        config_.fast_gear_angle_error,
+        config_.fast_gear_angle_error);
+    pnh_.param(
+        "fast_gear_min_confidence",
+        config_.fast_gear_min_confidence,
+        config_.fast_gear_min_confidence);
+
+    pnh_.param(
+        "yaw_rate_feedback_kp",
+        config_.yaw_rate_feedback_kp,
+        config_.yaw_rate_feedback_kp);
+    pnh_.param(
+        "linear_velocity_feedback_kp",
+        config_.linear_velocity_feedback_kp,
+        config_.linear_velocity_feedback_kp);
+    pnh_.param(
+        "min_linear_velocity_quality",
+        config_.min_linear_velocity_quality,
+        config_.min_linear_velocity_quality);
+    pnh_.param(
+        "feedback_timeout_sec",
+        config_.feedback_timeout_sec,
+        config_.feedback_timeout_sec);
+
+    pnh_.param(
+        "corner_approach_bottom_distance_px",
+        config_.corner_approach_bottom_distance_px,
+        config_.corner_approach_bottom_distance_px);
     pnh_.param(
         "turn_trigger_bottom_distance_px",
         config_.turn_trigger_bottom_distance_px,
@@ -176,6 +269,21 @@ void PipelineInspectionController::loadParameters()
         config_.module_request_interval_sec);
     pnh_.param(
         "service_wait_sec", config_.service_wait_sec, config_.service_wait_sec);
+
+    config_.command_rate_hz = std::max(1.0, config_.command_rate_hz);
+    config_.min_observation_confidence = clampValue(
+        config_.min_observation_confidence, 0.0, 1.0);
+    config_.minimum_surge_scale = clampValue(
+        config_.minimum_surge_scale, 0.0, 1.0);
+    config_.align_surge_command = clampValue(
+        config_.align_surge_command, 0.0, 1.0);
+    config_.track_surge_command = clampValue(
+        config_.track_surge_command, 0.0, 1.0);
+    config_.turn_surge_command = clampValue(
+        config_.turn_surge_command, 0.0, 1.0);
+    config_.corner_approach_bottom_distance_px = std::max(
+        config_.corner_approach_bottom_distance_px,
+        config_.turn_trigger_bottom_distance_px);
 }
 
 void PipelineInspectionController::observationCb(
@@ -227,6 +335,9 @@ void PipelineInspectionController::stepStateMachine()
     case InspectionState::TRACK_PRIMARY_LINE:
         handleTrackPrimaryLine();
         break;
+    case InspectionState::APPROACH_CORNER:
+        handleApproachCorner();
+        break;
     case InspectionState::TURNING_TO_SECONDARY_LINE:
         handleTurningToSecondaryLine();
         break;
@@ -236,14 +347,19 @@ void PipelineInspectionController::stepStateMachine()
     case InspectionState::TRACK_SECONDARY_LINE:
         handleTrackSecondaryLine();
         break;
+    case InspectionState::RECOVER_LINE:
+        handleRecoverLine();
+        break;
     case InspectionState::FINISHING:
         handleFinishing();
         break;
     case InspectionState::COMPLETED:
+        vehicle_->publishCommand(VehicleCommandInterface::RcRelease());
+        break;
     case InspectionState::FAULT:
     case InspectionState::BOOTSTRAP:
     default:
-        vehicle_->publishHold();
+        vehicle_->publishCommand(VehicleCommandInterface::RcNeutral());
         break;
     }
 }
@@ -262,9 +378,17 @@ void PipelineInspectionController::enterState(
                             << stateToString(next_state) << " (" << reason << ")");
 
     state_ = next_state;
+    state_entered_at_ = ros::Time::now();
     line_stable_since_ = ros::Time();
     align_stable_since_ = ros::Time();
     turn_ready_since_ = ros::Time();
+
+    if (next_state == InspectionState::SEARCH_PRIMARY_LINE ||
+        next_state == InspectionState::RECOVER_LINE)
+    {
+        error_filter_initialized_ = false;
+        last_error_update_time_ = ros::Time();
+    }
 
     if (next_state == InspectionState::TURNING_TO_SECONDARY_LINE)
     {
@@ -296,12 +420,16 @@ std::string PipelineInspectionController::stateToString(
         return "ALIGN_PRIMARY_LINE";
     case InspectionState::TRACK_PRIMARY_LINE:
         return "TRACK_PRIMARY_LINE";
+    case InspectionState::APPROACH_CORNER:
+        return "APPROACH_CORNER";
     case InspectionState::TURNING_TO_SECONDARY_LINE:
         return "TURNING_TO_SECONDARY_LINE";
     case InspectionState::ALIGN_SECONDARY_LINE:
         return "ALIGN_SECONDARY_LINE";
     case InspectionState::TRACK_SECONDARY_LINE:
         return "TRACK_SECONDARY_LINE";
+    case InspectionState::RECOVER_LINE:
+        return "RECOVER_LINE";
     case InspectionState::FINISHING:
         return "FINISHING";
     case InspectionState::COMPLETED:
@@ -315,6 +443,8 @@ std::string PipelineInspectionController::stateToString(
 
 void PipelineInspectionController::handleStartInspection()
 {
+    vehicle_->publishCommand(VehicleCommandInterface::RcNeutral());
+
     if (config_.autostart_module.empty())
     {
         enterState(
@@ -365,13 +495,14 @@ void PipelineInspectionController::handleStartInspection()
 
 void PipelineInspectionController::handleSearchPrimaryLine()
 {
-    vehicle_->publishHold();
-
     if (!hasUsablePrimaryLine())
     {
+        vehicle_->publishCommand(buildSearchCommand());
         line_stable_since_ = ros::Time();
         return;
     }
+
+    vehicle_->publishCommand(VehicleCommandInterface::RcNeutral());
 
     if (line_stable_since_.isZero())
     {
@@ -389,9 +520,8 @@ void PipelineInspectionController::handleAlignPrimaryLine()
 {
     if (!hasUsablePrimaryLine())
     {
-        vehicle_->publishHold();
-        enterState(
-            InspectionState::SEARCH_PRIMARY_LINE,
+        beginRecovery(
+            RecoveryTarget::PRIMARY,
             "lost primary line while aligning");
         return;
     }
@@ -420,9 +550,8 @@ void PipelineInspectionController::handleTrackPrimaryLine()
 {
     if (!hasUsablePrimaryLine())
     {
-        vehicle_->publishHold();
-        enterState(
-            InspectionState::SEARCH_PRIMARY_LINE,
+        beginRecovery(
+            RecoveryTarget::PRIMARY,
             "lost primary line while tracking");
         return;
     }
@@ -435,20 +564,59 @@ void PipelineInspectionController::handleTrackPrimaryLine()
         return;
     }
 
-    vehicle_->publishCommand(buildTrackingCommand(TargetLine::PRIMARY, true));
-
     if (!hasUsableSecondaryLine())
     {
-        turn_ready_since_ = ros::Time();
+        vehicle_->publishCommand(buildTrackingCommand(TargetLine::PRIMARY, true));
         return;
     }
 
     double bottom_distance_px = 0.0;
     if (!getIntersectionBottomDistancePx(&bottom_distance_px))
     {
-        turn_ready_since_ = ros::Time();
+        vehicle_->publishCommand(buildTrackingCommand(TargetLine::PRIMARY, true));
         return;
     }
+
+    if (bottom_distance_px <= config_.corner_approach_bottom_distance_px)
+    {
+        enterState(
+            InspectionState::APPROACH_CORNER,
+            "secondary line and corner entered approach range");
+        vehicle_->publishCommand(buildTrackingCommand(TargetLine::PRIMARY, false));
+        return;
+    }
+
+    vehicle_->publishCommand(buildTrackingCommand(TargetLine::PRIMARY, true));
+}
+
+void PipelineInspectionController::handleApproachCorner()
+{
+    if (!hasUsablePrimaryLine())
+    {
+        beginRecovery(
+            RecoveryTarget::PRIMARY,
+            "lost primary line while approaching corner");
+        return;
+    }
+
+    if (!hasUsableSecondaryLine())
+    {
+        enterState(
+            InspectionState::TRACK_PRIMARY_LINE,
+            "secondary line disappeared before corner");
+        return;
+    }
+
+    double bottom_distance_px = 0.0;
+    if (!getIntersectionBottomDistancePx(&bottom_distance_px))
+    {
+        enterState(
+            InspectionState::TRACK_PRIMARY_LINE,
+            "corner intersection disappeared");
+        return;
+    }
+
+    vehicle_->publishCommand(buildTrackingCommand(TargetLine::PRIMARY, false));
 
     if (bottom_distance_px > config_.turn_trigger_bottom_distance_px)
     {
@@ -503,8 +671,8 @@ void PipelineInspectionController::handleTurningToSecondaryLine()
     if (!turn_started_at_.isZero() &&
         (ros::Time::now() - turn_started_at_).toSec() >= config_.turn_timeout_sec)
     {
-        enterState(
-            InspectionState::FAULT,
+        beginRecovery(
+            RecoveryTarget::SECONDARY,
             "secondary line was not found before turn timeout");
     }
 }
@@ -513,8 +681,8 @@ void PipelineInspectionController::handleAlignSecondaryLine()
 {
     if (!hasUsableSecondaryLine())
     {
-        enterState(
-            InspectionState::TURNING_TO_SECONDARY_LINE,
+        beginRecovery(
+            RecoveryTarget::SECONDARY,
             "lost secondary line while aligning");
         return;
     }
@@ -543,8 +711,8 @@ void PipelineInspectionController::handleTrackSecondaryLine()
 {
     if (!hasUsableSecondaryLine())
     {
-        enterState(
-            InspectionState::TURNING_TO_SECONDARY_LINE,
+        beginRecovery(
+            RecoveryTarget::SECONDARY,
             "lost secondary line while tracking");
         return;
     }
@@ -560,9 +728,69 @@ void PipelineInspectionController::handleTrackSecondaryLine()
     vehicle_->publishCommand(buildTrackingCommand(TargetLine::SECONDARY, true));
 }
 
+void PipelineInspectionController::handleRecoverLine()
+{
+    const bool recovered = recovery_target_ == RecoveryTarget::PRIMARY
+        ? hasUsablePrimaryLine()
+        : hasUsableSecondaryLine();
+
+    if (recovered)
+    {
+        vehicle_->publishCommand(VehicleCommandInterface::RcNeutral());
+
+        if (line_stable_since_.isZero())
+        {
+            line_stable_since_ = ros::Time::now();
+        }
+        else if ((ros::Time::now() - line_stable_since_).toSec() >=
+                 config_.line_stable_hold_sec)
+        {
+            enterState(
+                recovery_target_ == RecoveryTarget::PRIMARY
+                    ? InspectionState::ALIGN_PRIMARY_LINE
+                    : InspectionState::ALIGN_SECONDARY_LINE,
+                "target line recovered");
+            return;
+        }
+    }
+    else
+    {
+        line_stable_since_ = ros::Time();
+        vehicle_->publishCommand(buildRecoveryCommand());
+    }
+
+    if (!state_entered_at_.isZero() &&
+        (ros::Time::now() - state_entered_at_).toSec() >=
+            config_.recovery_timeout_sec)
+    {
+        if (recovery_target_ == RecoveryTarget::PRIMARY)
+        {
+            enterState(
+                InspectionState::SEARCH_PRIMARY_LINE,
+                "primary line recovery timed out");
+        }
+        else
+        {
+            enterState(
+                InspectionState::FAULT,
+                "secondary line recovery timed out");
+        }
+    }
+}
+
+void PipelineInspectionController::beginRecovery(
+    RecoveryTarget target,
+    const std::string& reason)
+{
+    recovery_target_ = target;
+    recovery_scan_sign_ = turn_direction_ready_ ? turn_direction_sign_ : 1.0;
+    vehicle_->publishCommand(VehicleCommandInterface::RcNeutral());
+    enterState(InspectionState::RECOVER_LINE, reason);
+}
+
 void PipelineInspectionController::handleFinishing()
 {
-    vehicle_->publishHold();
+    vehicle_->publishCommand(VehicleCommandInterface::RcNeutral());
 
     if (!module_started_ || config_.autostart_module.empty())
     {
@@ -861,58 +1089,265 @@ bool PipelineInspectionController::resolveTurnDirection(
 PipelineInspectionController::ControlCommand
 PipelineInspectionController::buildTrackingCommand(
     TargetLine target,
-    bool tracking_mode) const
+    bool tracking_mode)
 {
-    double lateral_error_norm = 0.0;
-    double angle_error_rad = 0.0;
-    if (!computeTargetErrors(target, &lateral_error_norm, &angle_error_rad))
+    ControlErrors errors;
+    if (!updateControlErrors(target, &errors))
     {
-        return VehicleCommandInterface::Hold();
+        return VehicleCommandInterface::RcNeutral();
     }
 
-    const double vy = clampValue(
-        config_.vy_from_x_gain * lateral_error_norm,
-        -config_.max_lateral_speed,
-        config_.max_lateral_speed);
+    MotionReference reference;
+    reference.sway = clampValue(
+        config_.sway_from_lateral_gain * errors.lateral +
+            config_.sway_from_lateral_rate_gain * errors.lateral_rate,
+        -1.0,
+        1.0);
 
-    const double yaw_rate = clampValue(
-        config_.yaw_rate_from_angle_gain * angle_error_rad,
+    reference.yaw_rate = clampValue(
+        config_.yaw_rate_from_angle_gain * errors.angle +
+            config_.yaw_rate_from_lateral_gain * errors.lateral,
         -config_.max_yaw_rate,
         config_.max_yaw_rate);
 
-    if (!isTargetAligned(target))
+    const double alignment_scale = std::exp(
+        -config_.surge_lateral_error_weight * std::fabs(errors.lateral) -
+        config_.surge_angle_error_weight * std::fabs(errors.angle));
+    const double confidence_denominator =
+        std::max(1e-6, 1.0 - config_.min_observation_confidence);
+    const double confidence_scale = clampValue(
+        (last_observation_.confidence - config_.min_observation_confidence) /
+            confidence_denominator,
+        config_.minimum_surge_scale,
+        1.0);
+
+    const double base_surge = tracking_mode
+        ? config_.track_surge_command
+        : config_.align_surge_command;
+    reference.surge = clampValue(
+        base_surge *
+            std::max(
+                config_.minimum_surge_scale,
+                alignment_scale * confidence_scale),
+        0.0,
+        1.0);
+
+    if (std::fabs(errors.lateral) >= config_.hard_stop_lateral_error ||
+        std::fabs(errors.angle) >= config_.hard_stop_angle_error)
     {
-        return VehicleCommandInterface::BodyVelocity(0.0, vy, 0.0, yaw_rate);
+        reference.surge = 0.0;
     }
 
-    if (config_.target_range_m > 0.0 && last_observation_.range_hint_m > 0.0)
-    {
-        const double vx = clampValue(
-            config_.vx_from_range_gain *
-                (last_observation_.range_hint_m - config_.target_range_m),
-            -config_.max_forward_speed,
-            config_.max_forward_speed);
-        return VehicleCommandInterface::BodyVelocity(vx, vy, 0.0, yaw_rate);
-    }
-
-    const double forward_speed =
-        tracking_mode ? config_.track_forward_speed : config_.align_forward_speed;
-
-    const double vx = clampValue(
-        forward_speed, -config_.max_forward_speed, config_.max_forward_speed);
-    return VehicleCommandInterface::BodyVelocity(vx, vy, 0.0, yaw_rate);
+    reference.gear = selectTrackingGear(errors, tracking_mode);
+    return buildRcCommand(reference);
 }
 
 PipelineInspectionController::ControlCommand
-PipelineInspectionController::buildTurningCommand() const
+PipelineInspectionController::buildTurningCommand()
 {
-    const double vx = clampValue(
-        config_.turn_forward_speed,
-        -config_.max_forward_speed,
-        config_.max_forward_speed);
-    const double yaw_rate = clampValue(
-        turn_direction_sign_ * config_.turn_yaw_rate,
-        -config_.max_yaw_rate,
-        config_.max_yaw_rate);
-    return VehicleCommandInterface::BodyVelocity(vx, 0.0, 0.0, yaw_rate);
+    MotionReference reference;
+    reference.surge = clampValue(config_.turn_surge_command, 0.0, 1.0);
+    reference.yaw_rate = turn_direction_sign_ * config_.turn_yaw_rate;
+    reference.gear = RcSpeedGear::SLOW;
+
+    ControlErrors errors;
+    if (hasUsableSecondaryLine() &&
+        updateControlErrors(TargetLine::SECONDARY, &errors))
+    {
+        const double visual_yaw_rate = clampValue(
+            config_.yaw_rate_from_angle_gain * errors.angle +
+                config_.yaw_rate_from_lateral_gain * errors.lateral,
+            -config_.max_yaw_rate,
+            config_.max_yaw_rate);
+        const double minimum_turn_rate = 0.35 * config_.turn_yaw_rate;
+        reference.yaw_rate = visual_yaw_rate * turn_direction_sign_ >=
+                minimum_turn_rate
+            ? visual_yaw_rate
+            : turn_direction_sign_ * minimum_turn_rate;
+    }
+
+    return buildRcCommand(reference);
+}
+
+PipelineInspectionController::ControlCommand
+PipelineInspectionController::buildSearchCommand() const
+{
+    const double interval = std::max(0.1, config_.search_reverse_interval_sec);
+    const double elapsed = state_entered_at_.isZero()
+        ? 0.0
+        : (ros::Time::now() - state_entered_at_).toSec();
+    const int phase = static_cast<int>(elapsed / interval);
+    const double direction = phase % 2 == 0 ? 1.0 : -1.0;
+
+    return VehicleCommandInterface::RcOverride(
+        0.0,
+        0.0,
+        0.0,
+        direction * clampValue(config_.search_yaw_command, 0.0, 1.0),
+        RcSpeedGear::SLOW);
+}
+
+PipelineInspectionController::ControlCommand
+PipelineInspectionController::buildRecoveryCommand() const
+{
+    const double elapsed = state_entered_at_.isZero()
+        ? 0.0
+        : (ros::Time::now() - state_entered_at_).toSec();
+    const double half_timeout = 0.5 * std::max(0.1, config_.recovery_timeout_sec);
+    const double sweep_sign = elapsed < half_timeout ? 1.0 : -1.0;
+
+    return VehicleCommandInterface::RcOverride(
+        0.0,
+        0.0,
+        0.0,
+        sweep_sign * recovery_scan_sign_ *
+            clampValue(config_.recovery_yaw_command, 0.0, 1.0),
+        RcSpeedGear::SLOW);
+}
+
+PipelineInspectionController::ControlCommand
+PipelineInspectionController::buildRcCommand(
+    const MotionReference& reference) const
+{
+    double surge = clampValue(reference.surge, -1.0, 1.0);
+    double sway = clampValue(reference.sway, -1.0, 1.0);
+    double heave = clampValue(reference.heave, -1.0, 1.0);
+    double yaw = config_.max_yaw_rate > 1e-6
+        ? reference.yaw_rate / config_.max_yaw_rate
+        : 0.0;
+
+    VehicleCommandInterface::Feedback feedback;
+    if (getFreshFeedback(&feedback))
+    {
+        if (feedback.angular_velocity_valid && config_.max_yaw_rate > 1e-6)
+        {
+            yaw += config_.yaw_rate_feedback_kp *
+                (reference.yaw_rate - feedback.yaw_rate) /
+                config_.max_yaw_rate;
+        }
+
+        if (feedback.linear_velocity_valid &&
+            feedback.linear_velocity_quality >=
+                config_.min_linear_velocity_quality)
+        {
+            if (config_.max_forward_speed > 1e-6)
+            {
+                const double desired_vx =
+                    reference.surge * config_.max_forward_speed;
+                surge += config_.linear_velocity_feedback_kp *
+                    (desired_vx - feedback.body_vx) /
+                    config_.max_forward_speed;
+            }
+
+            if (config_.max_lateral_speed > 1e-6)
+            {
+                const double desired_vy =
+                    reference.sway * config_.max_lateral_speed;
+                sway += config_.linear_velocity_feedback_kp *
+                    (desired_vy - feedback.body_vy) /
+                    config_.max_lateral_speed;
+            }
+        }
+    }
+
+    return VehicleCommandInterface::RcOverride(
+        clampValue(surge, -1.0, 1.0),
+        clampValue(sway, -1.0, 1.0),
+        clampValue(heave, -1.0, 1.0),
+        clampValue(yaw, -1.0, 1.0),
+        reference.gear);
+}
+
+bool PipelineInspectionController::updateControlErrors(
+    TargetLine target,
+    ControlErrors* errors)
+{
+    if (errors == nullptr)
+    {
+        return false;
+    }
+
+    double raw_lateral = 0.0;
+    double raw_angle = 0.0;
+    if (!computeTargetErrors(target, &raw_lateral, &raw_angle))
+    {
+        return false;
+    }
+
+    const ros::Time now = ros::Time::now();
+    if (!error_filter_initialized_ || error_filter_target_ != target ||
+        last_error_update_time_.isZero())
+    {
+        error_filter_initialized_ = true;
+        error_filter_target_ = target;
+        filtered_errors_.lateral = raw_lateral;
+        filtered_errors_.angle = raw_angle;
+        filtered_errors_.lateral_rate = 0.0;
+        last_error_update_time_ = now;
+        *errors = filtered_errors_;
+        return true;
+    }
+
+    const double dt = std::max(1e-3, (now - last_error_update_time_).toSec());
+    const double error_alpha = clampValue(
+        dt / (std::max(0.0, config_.error_filter_tau_sec) + dt),
+        0.0,
+        1.0);
+    const double old_lateral = filtered_errors_.lateral;
+
+    filtered_errors_.lateral += error_alpha *
+        (raw_lateral - filtered_errors_.lateral);
+    filtered_errors_.angle += error_alpha *
+        (raw_angle - filtered_errors_.angle);
+
+    const double raw_lateral_rate =
+        (filtered_errors_.lateral - old_lateral) / dt;
+    const double rate_alpha = clampValue(
+        dt / (std::max(0.0, config_.error_rate_filter_tau_sec) + dt),
+        0.0,
+        1.0);
+    filtered_errors_.lateral_rate += rate_alpha *
+        (raw_lateral_rate - filtered_errors_.lateral_rate);
+
+    last_error_update_time_ = now;
+    *errors = filtered_errors_;
+    return true;
+}
+
+RcSpeedGear PipelineInspectionController::selectTrackingGear(
+    const ControlErrors& errors,
+    bool tracking_mode) const
+{
+    if (!tracking_mode)
+    {
+        return RcSpeedGear::SLOW;
+    }
+
+    if (std::fabs(errors.lateral) <= config_.fast_gear_lateral_error &&
+        std::fabs(errors.angle) <= config_.fast_gear_angle_error &&
+        last_observation_.confidence >= config_.fast_gear_min_confidence)
+    {
+        return RcSpeedGear::FAST;
+    }
+
+    if (std::fabs(errors.lateral) <= config_.medium_gear_lateral_error &&
+        std::fabs(errors.angle) <= config_.medium_gear_angle_error)
+    {
+        return RcSpeedGear::MEDIUM;
+    }
+
+    return RcSpeedGear::SLOW;
+}
+
+bool PipelineInspectionController::getFreshFeedback(
+    VehicleCommandInterface::Feedback* feedback) const
+{
+    if (feedback == nullptr || !vehicle_->getFeedback(feedback) ||
+        feedback->stamp.isZero())
+    {
+        return false;
+    }
+
+    return (ros::Time::now() - feedback->stamp).toSec() <=
+        config_.feedback_timeout_sec;
 }
