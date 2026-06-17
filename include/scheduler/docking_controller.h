@@ -62,6 +62,7 @@ private:
         int retry_times{3};
         int stable_frames{5};
         MotionLimitConfig command_limits{0.0, 0.0, 0.0, 0.2};
+        RcSpeedGear rc_gear{RcSpeedGear::SLOW};
     };
 
     struct ApproachConfig
@@ -72,6 +73,7 @@ private:
         int stable_frames{3};
         int lost_frames_tolerance{10};
         MotionLimitConfig command_limits{0.20, 0.1, 0.1, 0.3};
+        RcSpeedGear rc_gear{RcSpeedGear::MEDIUM};
 
         double fresh_tolerance_s{5.0};
     };
@@ -91,6 +93,7 @@ private:
         int stable_frames{7};
         int lost_frames_tolerance{5};
         MotionLimitConfig command_limits{0.1, 0.2, 0.1, 0.2};
+        RcSpeedGear rc_gear{RcSpeedGear::SLOW};
 
         double fresh_tolerance_s{2.0};
     };
@@ -108,6 +111,7 @@ private:
         int stable_frames{10};
         int lost_frames_tolerance{3};
         MotionLimitConfig command_limits{0.0, 1.0, 0.05, 0.1};
+        RcSpeedGear rc_gear{RcSpeedGear::SLOW};
 
         double fresh_tolerance_s{1.0};
     };
@@ -118,6 +122,7 @@ private:
         double complete_distance_m{0.15};
         double max_duration_sec{8.0};
         MotionLimitConfig command_limits{0.08, 0.0, 0.0, 0.0};
+        RcSpeedGear rc_gear{RcSpeedGear::SLOW};
     };
 
     struct Config
@@ -136,6 +141,8 @@ private:
         double observation_timeout_sec{0.5};
         double module_request_interval_sec{1.0};
         double service_wait_sec{0.2};
+        double yaw_rate_feedback_kp{0.45};
+        double feedback_timeout_sec{0.30};
 
         SearchConfig search;
         ApproachConfig approach;
@@ -212,6 +219,7 @@ private:
 
     void loadParameters();
     void loadMotionLimits(const std::string& prefix, MotionLimitConfig* limits);
+    void loadRcGear(const std::string& prefix, RcSpeedGear* gear);
 
     void step();
     void enterState(State next_state, const std::string& reason);
@@ -246,4 +254,5 @@ private:
     bool stopModuleIfNeeded();
 
     ControlCommand buildCommand(State state) const;
+    bool getFreshFeedback(VehicleCommandInterface::Feedback* feedback) const;
 };

@@ -3,7 +3,7 @@
 mission_type: "pipeline_inspection"
 
 # Generic flight mode used by scheduler_node before any mission logic starts.
-flight_mode: "GUIDED"
+flight_mode: "MANUAL"
 
 # Whether scheduler_node should block until /mavros/state reports FCU connected.
 wait_for_fcu_connection: true

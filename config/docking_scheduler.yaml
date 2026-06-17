@@ -3,7 +3,7 @@
 mission_type: "docking"
 
 # Generic flight mode used by scheduler_node before any mission logic starts.
-flight_mode: "GUIDED"
+flight_mode: "MANUAL"
 
 # Whether scheduler_node should block until /mavros/state reports FCU connected.
 wait_for_fcu_connection: true
@@ -37,6 +37,28 @@ auto_start_inspection: true
 # Main control loop frequency.
 command_rate_hz: 20.0
 
+# MAVROS topics used by the RC and feedback adapter.
+rc_override_topic: "/mavros/rc/override"
+imu_topic: "/mavros/imu/data"
+state_topic: "/mavros/state"
+local_pose_topic: "/mavros/local_position/pose"
+
+# Shared three-gear RC mapping.
+rc_center_pwm: 1500
+rc_slow_max_pwm: 1650
+rc_medium_max_pwm: 1800
+rc_fast_max_pwm: 1900
+rc_surge_direction: 1
+rc_sway_direction: 1
+rc_heave_direction: 1
+rc_yaw_direction: 1
+rc_input_deadband: 0.02
+rc_pwm_slew_step: 20
+
+# IMU yaw-rate feedback applied inside each docking RC command.
+yaw_rate_feedback_kp: 0.45
+feedback_timeout_sec: 0.30
+
 # Reserved observation freshness timeout.
 observation_timeout_sec: 0.5
 
@@ -45,6 +67,7 @@ module_request_interval_sec: 1.0
 service_wait_sec: 0.2
 
 search:
+  rc_gear: "slow"
   scan_yaw_rate: 0.3141592653589793
   timeout_sec: 40.0
   retry_times: 3
@@ -55,6 +78,7 @@ search:
   max_yaw: 0.2
 
 approach:
+  rc_gear: "medium"
   forward_speed: 0.20
   yaw_kp: 0.8
   heave_kp: 0.1
@@ -67,6 +91,7 @@ approach:
   fresh_tolerance_s: 5.0
 
 align:
+  rc_gear: "slow"
   yaw_deg_tolerance: 5.0
   depth_m_tolerance: 0.08
   sway_m_tolerance: 0.07
@@ -84,6 +109,7 @@ align:
   fresh_tolerance_s: 2.0
 
 align_with_tag:
+  rc_gear: "slow"
   yaw_deg_tolerance: 2.0
   depth_m_tolerance: 0.04
   sway_m_tolerance: 0.03
@@ -99,6 +125,7 @@ align_with_tag:
   fresh_tolerance_s: 1.0
 
 enter_dock:
+  rc_gear: "slow"
   forward_speed: 0.08
   max_duration_sec: 8.0
   max_surge: 0.08

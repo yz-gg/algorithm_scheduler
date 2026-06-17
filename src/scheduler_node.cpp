@@ -16,7 +16,7 @@ int main(int argc, char** argv)
     bool wait_for_fcu_connection = true;
     bool set_flight_mode_on_start = true;
     bool auto_arm = true;
-    std::string flight_mode = "GUIDED";
+    std::string flight_mode = "MANUAL";
     std::string mission_type = "pipeline_inspection";
     double mavros_service_wait_sec = 5.0;
 

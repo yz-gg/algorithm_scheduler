@@ -77,6 +77,16 @@ double degreesToRadians(double value)
 {
     return value * M_PI / 180.0;
 }
+
+double normalizeCommand(double value, double limit)
+{
+    if (limit <= 1e-9)
+    {
+        return 0.0;
+    }
+
+    return clampValue(value / limit, -1.0, 1.0);
+}
 }
 
 DockingController::DockingController(
@@ -146,7 +156,7 @@ void DockingController::run()
     }
 
     stopModuleIfNeeded();
-    vehicle_->publishHold();
+    vehicle_->publishCommand(VehicleCommandInterface::RcRelease());
 }
 
 std::string DockingController::missionType() const
@@ -185,6 +195,14 @@ void DockingController::loadParameters()
         config_.module_request_interval_sec);
     pnh_.param(
         "service_wait_sec", config_.service_wait_sec, config_.service_wait_sec);
+    pnh_.param(
+        "yaw_rate_feedback_kp",
+        config_.yaw_rate_feedback_kp,
+        config_.yaw_rate_feedback_kp);
+    pnh_.param(
+        "feedback_timeout_sec",
+        config_.feedback_timeout_sec,
+        config_.feedback_timeout_sec);
 
     pnh_.param(
         "search/scan_yaw_rate",
@@ -203,6 +221,7 @@ void DockingController::loadParameters()
         config_.search.stable_frames,
         config_.search.stable_frames);
     loadMotionLimits("search", &config_.search.command_limits);
+    loadRcGear("search", &config_.search.rc_gear);
 
     pnh_.param(
         "approach/forward_speed",
@@ -225,6 +244,7 @@ void DockingController::loadParameters()
         config_.approach.lost_frames_tolerance,
         config_.approach.lost_frames_tolerance);
     loadMotionLimits("approach", &config_.approach.command_limits);
+    loadRcGear("approach", &config_.approach.rc_gear);
     pnh_.param(
         "approach/fresh_tolerance_s",
         config_.approach.fresh_tolerance_s,
@@ -262,6 +282,7 @@ void DockingController::loadParameters()
         config_.align.lost_frames_tolerance,
         config_.align.lost_frames_tolerance);
     loadMotionLimits("align", &config_.align.command_limits);
+    loadRcGear("align", &config_.align.rc_gear);
     pnh_.param(
         "align/fresh_tolerance_s",
         config_.align.fresh_tolerance_s,
@@ -300,6 +321,7 @@ void DockingController::loadParameters()
         config_.align_with_tag.lost_frames_tolerance,
         config_.align_with_tag.lost_frames_tolerance);
     loadMotionLimits("align_with_tag", &config_.align_with_tag.command_limits);
+    loadRcGear("align_with_tag", &config_.align_with_tag.rc_gear);
     pnh_.param(
         "align_with_tag/fresh_tolerance_s",
         config_.align_with_tag.fresh_tolerance_s,
@@ -318,6 +340,7 @@ void DockingController::loadParameters()
         config_.enter_dock.max_duration_sec,
         config_.enter_dock.max_duration_sec);
     loadMotionLimits("enter_dock", &config_.enter_dock.command_limits);
+    loadRcGear("enter_dock", &config_.enter_dock.rc_gear);
 }
 
 void DockingController::loadMotionLimits(
@@ -333,6 +356,31 @@ void DockingController::loadMotionLimits(
     pnh_.param(prefix + "/max_sway", limits->sway, limits->sway);
     pnh_.param(prefix + "/max_heave", limits->heave, limits->heave);
     pnh_.param(prefix + "/max_yaw", limits->yaw, limits->yaw);
+}
+
+void DockingController::loadRcGear(
+    const std::string& prefix,
+    RcSpeedGear* gear)
+{
+    if (gear == nullptr)
+    {
+        return;
+    }
+
+    std::string value = RcSpeedGearToString(*gear);
+    pnh_.param<std::string>(prefix + "/rc_gear", value, value);
+    const RcSpeedGear parsed = ParseRcSpeedGear(value, *gear);
+    if (std::string(RcSpeedGearToString(parsed)) != value)
+    {
+        ROS_WARN(
+            "Unknown RC gear [%s] for docking stage [%s], using [%s]",
+            value.c_str(),
+            prefix.c_str(),
+            RcSpeedGearToString(*gear));
+        return;
+    }
+
+    *gear = parsed;
 }
 
 void DockingController::step()
@@ -385,6 +433,11 @@ void DockingController::enterState(
 
     state_ = next_state;
     state_entered_at_ = ros::Time::now();
+
+    vehicle_->publishCommand(
+        next_state == State::COMPLETED
+            ? VehicleCommandInterface::RcRelease()
+            : VehicleCommandInterface::RcNeutral());
 }
 
 std::string DockingController::stateToString(State state) const
@@ -426,7 +479,7 @@ double DockingController::stateElapsedSec() const
 
 void DockingController::handleStart()
 {
-    vehicle_->publishHold();
+    vehicle_->publishCommand(VehicleCommandInterface::RcNeutral());
 
     if (config_.autostart_module.empty())
     {
@@ -481,7 +534,7 @@ void DockingController::handleStart()
 
 void DockingController::handleWaitForArmed()
 {
-    vehicle_->publishHold();
+    vehicle_->publishCommand(VehicleCommandInterface::RcNeutral());
 
     if (vehicle_->isArmed())
     {
@@ -556,7 +609,7 @@ void DockingController::handleApproach()
     }
     else
     {
-        vehicle_->publishHold();
+        vehicle_->publishCommand(VehicleCommandInterface::RcNeutral());
         ++data_.light_lost_count;
         if (data_.light_lost_count > config_.approach.lost_frames_tolerance)
         {
@@ -588,7 +641,8 @@ void DockingController::handleAlign()
     if (data_.dock_pose_valid && data_.new_dock_pose)
     {
         data_.clearCommand();
-        data_.yaw = data_.dock_yaw_error * config_.align.yaw_kp;
+        data_.yaw =
+            degreesToRadians(data_.dock_yaw_error) * config_.align.yaw_kp;
         data_.sway = data_.dock_sway_error * config_.align.sway_kp;
         data_.heave = data_.dock_depth_error * config_.align.heave_kp;
         data_.surge =
@@ -601,7 +655,7 @@ void DockingController::handleAlign()
     }
     else
     {
-        vehicle_->publishHold();
+        vehicle_->publishCommand(VehicleCommandInterface::RcNeutral());
         ++data_.dock_pose_lost_count;
         if (data_.dock_pose_lost_count > config_.align.lost_frames_tolerance)
         {
@@ -638,7 +692,8 @@ void DockingController::handleAlignWithTag()
         data_.clearCommand();
         data_.sway = config_.align_with_tag.sway_kp * data_.tag_sway_error;
         data_.heave = config_.align_with_tag.heave_kp * data_.tag_depth_error;
-        data_.yaw = config_.align_with_tag.yaw_kp * data_.tag_yaw_error;
+        data_.yaw = config_.align_with_tag.yaw_kp *
+            degreesToRadians(data_.tag_yaw_error);
 
         vehicle_->publishCommand(buildCommand(state_));
         data_.new_tag = false;
@@ -646,7 +701,7 @@ void DockingController::handleAlignWithTag()
     }
     else
     {
-        vehicle_->publishHold();
+        vehicle_->publishCommand(VehicleCommandInterface::RcNeutral());
         ++data_.tag_lost_count;
         if (data_.tag_lost_count > config_.align_with_tag.lost_frames_tolerance)
         {
@@ -680,7 +735,7 @@ void DockingController::handleEnterDock()
 {
     if (readyForDockComplete())
     {
-        vehicle_->publishHold();
+        vehicle_->publishCommand(VehicleCommandInterface::RcRelease());
         enterState(State::COMPLETED, "apriltag distance reached");
         return;
     }
@@ -698,13 +753,13 @@ void DockingController::handleEnterDock()
 
 void DockingController::handleCompleted()
 {
-    vehicle_->publishHold();
+    vehicle_->publishCommand(VehicleCommandInterface::RcRelease());
     stopModuleIfNeeded();
 }
 
 void DockingController::handleError()
 {
-    vehicle_->publishHold();
+    vehicle_->publishCommand(VehicleCommandInterface::RcNeutral());
     stopModuleIfNeeded();
 }
 
@@ -993,33 +1048,78 @@ bool DockingController::stopModuleIfNeeded()
 DockingController::ControlCommand DockingController::buildCommand(State state) const
 {
     const MotionLimitConfig* limits = nullptr;
+    RcSpeedGear gear = RcSpeedGear::SLOW;
 
     switch (state)
     {
     case State::SEARCH_BLUE_LIGHT:
         limits = &config_.search.command_limits;
+        gear = config_.search.rc_gear;
         break;
     case State::APPROACH_BLUE_LIGHT:
         limits = &config_.approach.command_limits;
+        gear = config_.approach.rc_gear;
         break;
     case State::ALIGN_WITH_DOCK:
         limits = &config_.align.command_limits;
+        gear = config_.align.rc_gear;
         break;
     case State::ALIGN_WITH_APRILTAG:
         limits = &config_.align_with_tag.command_limits;
+        gear = config_.align_with_tag.rc_gear;
         break;
     case State::ENTER_DOCK:
         limits = &config_.enter_dock.command_limits;
+        gear = config_.enter_dock.rc_gear;
         break;
     case State::START:
+    case State::WAIT_FOR_ARMED:
     case State::COMPLETED:
     case State::ERROR:
-        return VehicleCommandInterface::Hold();
+        return VehicleCommandInterface::RcNeutral();
     }
 
-    return VehicleCommandInterface::BodyVelocity(
-        clampValue(data_.surge, -limits->surge, limits->surge),
-        clampValue(data_.sway, -limits->sway, limits->sway),
-        clampValue(data_.heave, -limits->heave, limits->heave),
-        clampValue(data_.yaw, -limits->yaw, limits->yaw));
+    if (limits == nullptr)
+    {
+        return VehicleCommandInterface::RcNeutral();
+    }
+
+    const double surge_reference =
+        clampValue(data_.surge, -limits->surge, limits->surge);
+    const double sway_reference =
+        clampValue(data_.sway, -limits->sway, limits->sway);
+    const double heave_reference =
+        clampValue(data_.heave, -limits->heave, limits->heave);
+    const double yaw_rate_reference =
+        clampValue(data_.yaw, -limits->yaw, limits->yaw);
+
+    double yaw_command = normalizeCommand(yaw_rate_reference, limits->yaw);
+    VehicleCommandInterface::Feedback feedback;
+    if (limits->yaw > 1e-9 && getFreshFeedback(&feedback) &&
+        feedback.angular_velocity_valid)
+    {
+        yaw_command += config_.yaw_rate_feedback_kp *
+            (yaw_rate_reference - feedback.yaw_rate) / limits->yaw;
+    }
+
+    return VehicleCommandInterface::RcOverride(
+        normalizeCommand(surge_reference, limits->surge),
+        normalizeCommand(sway_reference, limits->sway),
+        normalizeCommand(heave_reference, limits->heave),
+        clampValue(yaw_command, -1.0, 1.0),
+        gear);
+}
+
+bool DockingController::getFreshFeedback(
+    VehicleCommandInterface::Feedback* feedback) const
+{
+    if (feedback == nullptr || !vehicle_->getFeedback(feedback) ||
+        !feedback->angular_velocity_valid ||
+        feedback->angular_velocity_stamp.isZero())
+    {
+        return false;
+    }
+
+    return (ros::Time::now() - feedback->angular_velocity_stamp).toSec() <=
+        config_.feedback_timeout_sec;
 }
